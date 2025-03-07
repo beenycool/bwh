@@ -741,4 +741,12 @@ public class HypixelBedWarsMod {
         return Minecraft.getMinecraft().getCurrentServerData() != null &&
                 Minecraft.getMinecraft().getCurrentServerData().serverIP.toLowerCase().contains("hypixel");
     }
+
+    private String getPotionName(int potionId) {
+        Potion potion = Potion.potionTypes[potionId];
+        if (potion != null) {
+            return potion.getName();
+        }
+        return "Unknown Potion";
+    }
 }
