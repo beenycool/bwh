@@ -524,10 +524,11 @@ public class HypixelBedWarsMod {
             int color = stack.getItem() == Items.diamond ? DIAMOND_COLOR : EMERALD_COLOR;
             float boxSize = 0.35F; // Size of the box
             
-            // Draw box
-            drawBox(relX, relY, relZ, boxSize, color);
-            
-            // Draw count text (facing the player)
+            float distance = player.getDistanceToEntity(item);
+            float alpha = 1.0F - (distance / 30.0F);
+            alpha = Math.max(0.2F, Math.min(1.0F, alpha)); // clamp between 0.2 and 1.0
+
+            drawBox(relX, relY, relZ, boxSize, color, alpha);
             drawItemCount(relX, relY + boxSize + 0.25, relZ, stack.stackSize, color);
         }
         
@@ -539,13 +540,13 @@ public class HypixelBedWarsMod {
         GL11.glPopMatrix();
     }
     
-    private void drawBox(double x, double y, double z, float size, int color) {
+    private void drawBox(double x, double y, double z, float size, int color, float alpha) {
         // Extract RGB components
         float r = ((color >> 16) & 0xFF) / 255.0F;
         float g = ((color >> 8) & 0xFF) / 255.0F;
         float b = (color & 0xFF) / 255.0F;
         
-        GL11.glColor4f(r, g, b, 0.5F); // Semi-transparent
+        GL11.glColor4f(r, g, b, alpha); // Semi-transparent
         
         // Draw filled box
         GL11.glBegin(GL11.GL_QUADS);
@@ -589,7 +590,7 @@ public class HypixelBedWarsMod {
         GL11.glEnd();
         
         // Draw outline with a slightly darker color
-        GL11.glColor4f(r * 0.8F, g * 0.8F, b * 0.8F, 0.8F);
+        GL11.glColor4f(r * 0.8F, g * 0.8F, b * 0.8F, alpha + 0.2F);
         GL11.glBegin(GL11.GL_LINES);
         
         // Bottom face
