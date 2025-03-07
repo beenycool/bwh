@@ -160,18 +160,36 @@ public class HypixelBedWarsMod {
 
     @SubscribeEvent
     public void onChat(ClientChatReceivedEvent event) {
-        String message = event.message.getUnformattedText();
-        if (message.startsWith(CONFIG_CMD)) {
+        String message = event.message.getFormattedText();
+        String unformattedMessage = event.message.getUnformattedText();
+        
+        if (unformattedMessage.startsWith(CONFIG_CMD)) {
             Minecraft.getMinecraft().displayGuiScreen(new GuiConfigScreen());
             event.setCanceled(true);
         }
 
         if (!isHypixelBedWars()) return;
 
+        // Detect game start
+        if (message.contains("§r§a§l▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬§r §r§f §r§f§lBed Wars§r")) {
+            inBedWarsGame = true;
+            detectedPlayers.clear();
+            return;
+        }
+
+        // Detect game end
+        if (message.contains("§6§l▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬") ||
+            message.contains("§r§e§lVICTORY!") ||
+            message.contains("§r§c§lGAME OVER!")) {
+            inBedWarsGame = false;
+            detectedPlayers.clear();
+            return;
+        }
+
         // Detect elimination messages
-        if (message.contains("You have been eliminated!") || 
-            message.contains("You died!") || 
-            message.contains("was killed by")) {
+        if (unformattedMessage.contains("You have been eliminated!") ||
+            unformattedMessage.contains("You died!") ||
+            unformattedMessage.contains("was killed by")) {
             detectedPlayers.clear();
         }
     }
@@ -243,9 +261,13 @@ public class HypixelBedWarsMod {
         if (hasDiamond && !detectedPlayers.contains(player.getName())) {
             int currentEmeralds = countEmeralds(player.inventory);
             int remaining = Math.max(currentEmeralds - 6, 0);
-            sendAlert(getColoredPlayerName(player) +
-                    EnumChatFormatting.AQUA + " bought Diamond Armor! (" +
-                    remaining + " Emeralds remaining)", true, SOUND_ARMOR);
+            if (inBedWarsGame) {
+                if (inBedWarsGame) {
+                    sendAlert(getColoredPlayerName(player) +
+                        EnumChatFormatting.AQUA + " bought Diamond Armor! (" +
+                        remaining + " Emeralds remaining)", true, SOUND_ARMOR);
+                }
+            }
             detectedPlayers.add(player.getName());
         }
     }
