@@ -49,11 +49,17 @@ public class HypixelBedWarsMod {
     // Team color detection pattern - matches color codes at start of name
     private static final Pattern TEAM_COLOR_PATTERN = Pattern.compile("§([0-9a-fk-or])");
     private static final Map<String, EnumChatFormatting> COLOR_MAP = initializeColorMap();
+    
+    // Potion IDs
+    private static final int SPEED_POTION_ID = 1;
+    private static final int JUMP_BOOST_POTION_ID = 8;
 
     // State tracking
     private final Map<String, PlayerState> playerStates = new HashMap<>();
+    private final Map<String, Team> teams = new HashMap<>();
     private final Set<String> detectedPlayers = new HashSet<>();
     private boolean inBedWarsGame = false;
+    private Team playerTeam;
 
     // Configuration options
     private boolean enableArmorAlerts = true;
@@ -173,8 +179,39 @@ public class HypixelBedWarsMod {
         // Detect game start
         if (message.contains("§r§a§l▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬§r §r§f §r§f§lBed Wars§r")) {
             inBedWarsGame = true;
-            detectedPlayers.clear();
+            initializeGame();
             return;
+        }
+
+        // Track bed destruction
+        if (message.matches(".*§r§f§lBED DESTRUCTION > .* bed was destroyed by .*")) {
+            String[] parts = message.split(" bed was destroyed by ");
+            if (parts.length == 2) {
+                String teamColor = getTeamColor(parts[0]);
+                if (teamColor != null && teams.containsKey(teamColor)) {
+                    teams.get(teamColor).setBedState(false);
+                    if (playerTeam != null && teamColor.equals(playerTeam.getColor())) {
+                        sendAlert(EnumChatFormatting.RED + "YOUR TEAM'S BED WAS DESTROYED!", true, "random.anvil_land");
+                    }
+                }
+            }
+        }
+
+        // Track final kills
+        if (message.contains("§r§fFINAL KILL!")) {
+            String killedPlayer = extractPlayerName(message);
+            if (killedPlayer != null) {
+                for (Team team : teams.values()) {
+                    if (team.getPlayers().contains(killedPlayer)) {
+                        team.removePlayer(killedPlayer);
+                        if (team.getPlayers().isEmpty() && !team.hasBed()) {
+                            String teamElimMsg = team.getFormatting() + "TEAM ELIMINATED > " + team.getColor() + " team has been eliminated!";
+                            sendAlert(teamElimMsg, true, "random.levelup");
+                        }
+                        break;
+                    }
+                }
+            }
         }
 
         // Detect game end
@@ -233,15 +270,33 @@ public class HypixelBedWarsMod {
     // Modified to include localPlayer for team checks
     private void processPlayer(EntityPlayer player, EntityPlayer localPlayer) {
         if (isRespawning(player)) return; // Skip respawning players
+
+        String playerName = player.getName();
+        String teamColor = getTeamColor(player.getDisplayName().getFormattedText());
         
+        // Update team assignment if needed
+        if (teamColor != null) {
+            String teamName = getTeamName(teamColor);
+            if (teamName != null && teams.containsKey(teamName)) {
+                Team playerTeam = teams.get(teamName);
+                if (!playerTeam.getPlayers().contains(playerName)) {
+                    // Remove from other teams if necessary
+                    for (Team team : teams.values()) {
+                        team.removePlayer(playerName);
+                    }
+                    playerTeam.addPlayer(playerName);
+                }
+            }
+        }
+
         // Skip teammates if the option is enabled
         if (excludeTeammates && isSameTeam(player, localPlayer)) {
             return;
         }
 
-        String playerName = player.getDisplayName().getUnformattedText();
         PlayerState state = playerStates.computeIfAbsent(playerName, k -> new PlayerState());
 
+        // Process core alerts
         if (enableArmorAlerts) checkArmor(player, state);
         if (enableItemAlerts) checkHeldItem(player, state);
         if (enableEmeraldAlerts) checkEmeralds(player, state);
@@ -249,6 +304,19 @@ public class HypixelBedWarsMod {
         if (enableSwordAlerts) checkDiamondSword(player, state);
         if (enablePotionAlerts) checkPotions(player, state);
         if (enableFireballAlerts && enableItemAlerts) checkFireball(player, state);
+
+        // Team-specific checks
+        if (teamColor != null) {
+            Team team = teams.get(getTeamName(teamColor));
+            if (team != null && !team.hasBed()) {
+                // Additional alert for low-health players without a bed
+                if (player.getHealth() <= 10.0F) { // 5 hearts or less
+                    sendAlert(getColoredPlayerName(player) +
+                            EnumChatFormatting.RED + " is low health with NO BED! " +
+                            getDistanceString(player), true, "random.successful_hit");
+                }
+            }
+        }
     }
 
     private void checkArmor(EntityPlayer player, PlayerState state) {
@@ -328,14 +396,17 @@ public class HypixelBedWarsMod {
         
         for (PotionEffect effect : player.getActivePotionEffects()) {
             int id = effect.getPotionID();
-            currentPotions.put(id, true);
-            
-            // Alert for newly acquired potions
-            if (!state.activePotions.containsKey(id)) {
-                String potionName = getPotionName(id);
-                sendAlert(getColoredPlayerName(player) +
-                        EnumChatFormatting.LIGHT_PURPLE + " drank " + potionName + "! " +
-                        getDistanceString(player), true, SOUND_POTION);
+            // Only track Speed and Jump Boost potions
+            if (id == SPEED_POTION_ID || id == JUMP_BOOST_POTION_ID) {
+                currentPotions.put(id, true);
+                
+                // Alert for newly acquired potions
+                if (!state.activePotions.containsKey(id)) {
+                    String potionName = getPotionName(id);
+                    sendAlert(getColoredPlayerName(player) +
+                            EnumChatFormatting.LIGHT_PURPLE + " drank " + potionName + "! " +
+                            getDistanceString(player), true, SOUND_POTION);
+                }
             }
         }
         
@@ -478,24 +549,75 @@ public class HypixelBedWarsMod {
 
     private static Map<String, EnumChatFormatting> initializeColorMap() {
         Map<String, EnumChatFormatting> map = new HashMap<>();
-        // Map Minecraft color codes to EnumChatFormatting
-        map.put("0", EnumChatFormatting.BLACK);
-        map.put("1", EnumChatFormatting.DARK_BLUE);
-        map.put("2", EnumChatFormatting.DARK_GREEN);
-        map.put("3", EnumChatFormatting.DARK_AQUA);
-        map.put("4", EnumChatFormatting.DARK_RED);
-        map.put("5", EnumChatFormatting.DARK_PURPLE);
-        map.put("6", EnumChatFormatting.GOLD);
-        map.put("7", EnumChatFormatting.GRAY);
-        map.put("8", EnumChatFormatting.DARK_GRAY);
-        map.put("9", EnumChatFormatting.BLUE);
-        map.put("a", EnumChatFormatting.GREEN);
-        map.put("b", EnumChatFormatting.AQUA);
-        map.put("c", EnumChatFormatting.RED);
-        map.put("d", EnumChatFormatting.LIGHT_PURPLE);
-        map.put("e", EnumChatFormatting.YELLOW);
-        map.put("f", EnumChatFormatting.WHITE);
+        map.put("c", EnumChatFormatting.RED);        // Red Team
+        map.put("9", EnumChatFormatting.BLUE);       // Blue Team
+        map.put("e", EnumChatFormatting.YELLOW);     // Yellow Team
+        map.put("a", EnumChatFormatting.GREEN);      // Green Team
+        map.put("d", EnumChatFormatting.LIGHT_PURPLE); // Pink Team
+        map.put("7", EnumChatFormatting.GRAY);       // Gray Team
+        map.put("f", EnumChatFormatting.WHITE);      // White Team
+        map.put("8", EnumChatFormatting.DARK_GRAY);  // Dark Gray Team
         return map;
+    }
+
+    private void initializeGame() {
+        teams.clear();
+        detectedPlayers.clear();
+        playerTeam = null;
+
+        // Initialize teams
+        teams.put("RED", new Team("RED", EnumChatFormatting.RED));
+        teams.put("BLUE", new Team("BLUE", EnumChatFormatting.BLUE));
+        teams.put("YELLOW", new Team("YELLOW", EnumChatFormatting.YELLOW));
+        teams.put("GREEN", new Team("GREEN", EnumChatFormatting.GREEN));
+        teams.put("PINK", new Team("PINK", EnumChatFormatting.LIGHT_PURPLE));
+        teams.put("GRAY", new Team("GRAY", EnumChatFormatting.GRAY));
+        teams.put("WHITE", new Team("WHITE", EnumChatFormatting.WHITE));
+        teams.put("DARK_GRAY", new Team("DARK_GRAY", EnumChatFormatting.DARK_GRAY));
+
+        // Detect player's team
+        EntityPlayer localPlayer = Minecraft.getMinecraft().thePlayer;
+        if (localPlayer != null) {
+            String teamColor = getTeamColor(localPlayer.getDisplayName().getFormattedText());
+            if (teamColor != null && teams.containsKey(getTeamName(teamColor))) {
+                playerTeam = teams.get(getTeamName(teamColor));
+                playerTeam.addPlayer(localPlayer.getName());
+            }
+        }
+
+        // Update all player teams from tab list
+        for (NetworkPlayerInfo info : Minecraft.getMinecraft().thePlayer.sendQueue.getPlayerInfoMap()) {
+            String playerName = info.getGameProfile().getName();
+            String formattedName = info.getDisplayName() != null ? info.getDisplayName().getFormattedText() : "";
+            String teamColor = getTeamColor(formattedName);
+            if (teamColor != null && teams.containsKey(getTeamName(teamColor))) {
+                teams.get(getTeamName(teamColor)).addPlayer(playerName);
+            }
+        }
+    }
+
+    private String getTeamName(String colorCode) {
+        switch (colorCode) {
+            case "c": return "RED";
+            case "9": return "BLUE";
+            case "e": return "YELLOW";
+            case "a": return "GREEN";
+            case "d": return "PINK";
+            case "7": return "GRAY";
+            case "f": return "WHITE";
+            case "8": return "DARK_GRAY";
+            default: return null;
+        }
+    }
+
+    private String extractPlayerName(String message) {
+        String[] parts = message.split(" ");
+        for (String part : parts) {
+            if (part.startsWith("§") && !part.contains("§l") && !part.contains("§r")) {
+                return part.replaceAll("§[0-9a-fk-or]", "");
+            }
+        }
+        return null;
     }
 
     @SubscribeEvent
@@ -695,12 +817,17 @@ public class HypixelBedWarsMod {
         private final int BUTTON_WIDTH = 180;
         private final int BUTTON_HEIGHT = 20;
         private final int PADDING = 5;
+        private int scrollOffset = 0;
 
         @Override
         public void initGui() {
             this.buttonList.clear();
-            int y = height / 4;
-            
+            int y = height / 8 + scrollOffset;
+
+            // Draw Alert Settings header
+            drawSectionHeader("Alert Settings", y);
+            y += 20;
+
             buttonList.add(createToggleButton(0, "Armor Alerts", enableArmorAlerts, y));
             y += BUTTON_HEIGHT + PADDING;
             buttonList.add(createToggleButton(1, "Item Alerts", enableItemAlerts, y));
@@ -718,6 +845,33 @@ public class HypixelBedWarsMod {
             buttonList.add(createToggleButton(7, "Exclude Teammates", excludeTeammates, y));
             y += BUTTON_HEIGHT + PADDING;
             buttonList.add(createToggleButton(8, "Item ESP", enableItemESP, y));
+            y += BUTTON_HEIGHT + PADDING;
+
+            // Team Status Section
+            if (inBedWarsGame && !teams.isEmpty()) {
+                y += 15;
+                drawSectionHeader("Team Status", y);
+                y += 20;
+
+                for (Team team : teams.values()) {
+                    if (!team.getPlayers().isEmpty()) {
+                        drawTeamStatus(team, y);
+                        y += 15;
+                    }
+                }
+            }
+        }
+
+        private void drawTeamStatus(Team team, int y) {
+            String status = team.getFormatting() + team.getColor() +
+                          (team.hasBed() ? " ✔ " : " ✘ ") +
+                          team.getPlayers().size() + " players";
+            drawString(fontRendererObj, status, width/2 - 85, y, 0xFFFFFF);
+        }
+
+        private void drawSectionHeader(String text, int y) {
+            String header = "§l" + text + "§r";
+            drawCenteredString(fontRendererObj, header, width/2, y, 0xFFFFFF);
         }
 
         private GuiButton createToggleButton(int id, String text, boolean state, int y) {
@@ -745,8 +899,34 @@ public class HypixelBedWarsMod {
         @Override
         public void drawScreen(int mouseX, int mouseY, float partialTicks) {
             drawDefaultBackground();
-            drawCenteredString(fontRendererObj, "Bed Wars Assistant Settings", width/2, 40, 0xFFFFFF);
+            
+            // Handle mouse scroll
+            int dWheel = org.lwjgl.input.Mouse.getDWheel();
+            if (dWheel != 0) {
+                scrollOffset += (dWheel > 0) ? 20 : -20;
+                int maxScroll = inBedWarsGame && !teams.isEmpty() ? -200 : -100;
+                scrollOffset = Math.max(maxScroll, Math.min(0, scrollOffset));
+                initGui();
+            }
+
+            // Draw title with formatting
+            String title = "§l§eBed Wars Assistant Settings§r";
+            drawCenteredString(fontRendererObj, title, width/2, 15, 0xFFFFFF);
+
+            // Draw team info if in game
+            if (inBedWarsGame && playerTeam != null) {
+                String yourTeam = "Your Team: " + playerTeam.getFormatting() + playerTeam.getColor();
+                drawCenteredString(fontRendererObj, yourTeam, width/2, 30, 0xFFFFFF);
+            }
+
             super.drawScreen(mouseX, mouseY, partialTicks);
+        }
+
+        @Override
+        protected void handleMouseInput() {
+            super.handleMouseInput();
+            int mouseX = org.lwjgl.input.Mouse.getEventX() * width / mc.displayWidth;
+            int mouseY = height - org.lwjgl.input.Mouse.getEventY() * height / mc.displayHeight - 1;
         }
     }
 
