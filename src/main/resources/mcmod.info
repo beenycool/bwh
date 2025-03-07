@@ -1,0 +1,11 @@
+[
+  {
+    "modid": "hypixelbedwarsmod",
+    "name": "Hypixel Bed Wars Assistant",
+    "description": "A useful Bedwars Mod!",
+    "version": "1.0",
+    "mcversion": "1.8.9",
+    "authorList": ["Beeny"],
+    "url": ""
+  }
+]
