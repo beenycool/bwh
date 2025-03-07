@@ -1,4 +1,4 @@
-package com.example.hypixelbedwarsmod;
+package main.java.com.example.hypixelbedwarsmod;
 import net.minecraft.init.Blocks;
 import net.minecraft.entity.player.InventoryPlayer;
 import net.minecraft.client.Minecraft;
@@ -29,7 +29,12 @@ import org.lwjgl.opengl.GL11;
 import java.util.List;
 import java.util.ArrayList;
 
-import java.io.*;
+import java.io.BufferedReader;
+import java.io.BufferedWriter;
+import java.io.File;
+import java.io.FileReader;
+import java.io.FileWriter;
+import java.io.IOException;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
@@ -923,7 +928,7 @@ public class HypixelBedWarsMod {
         }
 
         @Override
-        protected void handleMouseInput() {
+        public void handleMouseInput() throws IOException {
             super.handleMouseInput();
             int mouseX = org.lwjgl.input.Mouse.getEventX() * width / mc.displayWidth;
             int mouseY = height - org.lwjgl.input.Mouse.getEventY() * height / mc.displayHeight - 1;

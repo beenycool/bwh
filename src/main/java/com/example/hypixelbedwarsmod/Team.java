@@ -1,4 +1,4 @@
-package com.example.hypixelbedwarsmod;
+package main.java.com.example.hypixelbedwarsmod;
 
 import net.minecraft.util.EnumChatFormatting;
 import java.util.HashSet;
