@@ -42,6 +42,7 @@ public class HypixelBedWarsMod {
     
     // Team color detection pattern - matches color codes at start of name
     private static final Pattern TEAM_COLOR_PATTERN = Pattern.compile("§([0-9a-fk-or])");
+    private static final Map<String, EnumChatFormatting> COLOR_MAP = initializeColorMap();
 
     // State tracking
     private final Map<String, PlayerState> playerStates = new HashMap<>();
@@ -217,7 +218,7 @@ public class HypixelBedWarsMod {
         if (hasDiamond && !detectedPlayers.contains(player.getName())) {
             int currentEmeralds = countEmeralds(player.inventory);
             int remaining = Math.max(currentEmeralds - 6, 0);
-            sendAlert(EnumChatFormatting.YELLOW + player.getName() +
+            sendAlert(getColoredPlayerName(player) +
                     EnumChatFormatting.AQUA + " bought Diamond Armor! (" +
                     remaining + " Emeralds remaining)", true, SOUND_ARMOR);
             detectedPlayers.add(player.getName());
@@ -237,13 +238,25 @@ public class HypixelBedWarsMod {
             
             // Only alert for specific items when they're first held
             if (currentItem == Items.bow) {
-                sendAlert(EnumChatFormatting.YELLOW + player.getName() +
+                sendAlert(getColoredPlayerName(player) +
                         EnumChatFormatting.AQUA + " is holding a BOW " +
                         getDistanceString(player), true, SOUND_SPECIAL_ITEM);
             } else if (currentItem == Items.ender_pearl) {
+                sendAlert(getColoredPlayerName(player) +
+                        EnumChatFormatting.AQUA + " has ENDER PEARLS " +
+                        getDistanceString(player), true, SOUND_SPECIAL_ITEM);
+            }
+        }
+    }
+    
+    private void checkDiamondSword(EntityPlayer player, PlayerState state) {
+        ItemStack heldStack = player.getHeldItem();
+        if (heldStack != null && heldStack.getItem() == Items.diamond_sword && !state.lastHeldDiamondSword) {
+            state.lastHeldDiamondSword = true;
+            sendAlert(getColoredPlayerName(player) + 
                     EnumChatFormatting.AQUA + " has a DIAMOND SWORD! " +
-                    getDistanceString(player), true);
-        } else if (currentItem != Items.diamond_sword) {
+                    getDistanceString(player), true, SOUND_DIAMOND_SWORD);
+        } else if (heldStack == null || heldStack.getItem() != Items.diamond_sword) {
             state.lastHeldDiamondSword = false;
         }
     }
@@ -255,9 +268,9 @@ public class HypixelBedWarsMod {
         Item currentItem = heldStack.getItem();
         if (currentItem == Items.fire_charge && !state.wasHoldingFireball) {
             state.wasHoldingFireball = true;
-            sendAlert(EnumChatFormatting.YELLOW + player.getName() +
+            sendAlert(getColoredPlayerName(player) +
                     EnumChatFormatting.RED + " is holding a FIREBALL! " +
-                    getDistanceString(player), true);
+                    getDistanceString(player), true, SOUND_FIREBALL);
         } else if (currentItem != Items.fire_charge) {
             state.wasHoldingFireball = false;
         }
@@ -273,9 +286,9 @@ public class HypixelBedWarsMod {
             // Alert for newly acquired potions
             if (!state.activePotions.containsKey(id)) {
                 String potionName = getPotionName(id);
-                sendAlert(EnumChatFormatting.YELLOW + player.getName() +
+                sendAlert(getColoredPlayerName(player) +
                         EnumChatFormatting.LIGHT_PURPLE + " drank " + potionName + "! " +
-                        getDistanceString(player), true);
+                        getDistanceString(player), true, SOUND_POTION);
             }
         }
         
@@ -283,23 +296,54 @@ public class HypixelBedWarsMod {
         for (Map.Entry<Integer, Boolean> entry : state.activePotions.entrySet()) {
             if (!currentPotions.containsKey(entry.getKey())) {
                 String potionName = getPotionName(entry.getKey());
-                sendAlert(EnumChatFormatting.YELLOW + player.getName() +
+                sendAlert(getColoredPlayerName(player) +
                         EnumChatFormatting.GRAY + "'s " + potionName + " wore off. " +
-                        getDistanceString(player), false);
+                        getDistanceString(player), false, null);
             }
         }
         
         state.activePotions = currentPotions;
     }
     
-    private String getPotionName(int id) {
-        if (id == Potion.moveSpeed.getId()) return "Speed";
-        if (id == Potion.jump.getId()) return "Jump Boost";
-        if (id == Potion.invisibility.getId()) return "Invisibility";
-        if (id == Potion.resistance.getId()) return "Resistance";
-        if (id == Potion.regeneration.getId()) return "Regeneration";
-        if (id == Potion.damageBoost.getId()) return "Strength";
-        return "Potion Effect";
+    private void checkInvisibility(EntityPlayer player, PlayerState state) {
+        boolean isInvisible = player.isInvisible();
+        if (isInvisible && !state.wasInvisible) {
+            state.wasInvisible = true;
+            sendAlert(getColoredPlayerName(player) +
+                    EnumChatFormatting.DARK_PURPLE + " is now INVISIBLE! " +
+                    getDistanceString(player), true, SOUND_INVIS);
+        } else if (!isInvisible && state.wasInvisible) {
+            state.wasInvisible = false;
+            sendAlert(getColoredPlayerName(player) +
+                    EnumChatFormatting.GRAY + " is no longer invisible. " +
+                    getDistanceString(player), false, null);
+        }
+    }
+    
+    private void checkEmeralds(EntityPlayer player, PlayerState state) {
+        int emeralds = countEmeralds(player.inventory);
+        if (emeralds >= 4 && emeralds > state.lastEmeralds) {
+            sendAlert(getColoredPlayerName(player) +
+                    EnumChatFormatting.GREEN + " has " + emeralds + " emeralds! " +
+                    getDistanceString(player), true, SOUND_EMERALD);
+        }
+        state.lastEmeralds = emeralds;
+    }
+    
+    /**
+     * Gets the player's name with their team color applied
+     */
+    private String getColoredPlayerName(EntityPlayer player) {
+        String formattedName = player.getDisplayName().getFormattedText();
+        String colorCode = getTeamColor(formattedName);
+        String playerName = player.getName();
+        
+        if (colorCode != null && COLOR_MAP.containsKey(colorCode)) {
+            return COLOR_MAP.get(colorCode) + playerName;
+        }
+        
+        // Default to yellow if no team color found
+        return EnumChatFormatting.YELLOW + playerName;
     }
 
     private int countEmeralds(InventoryPlayer inventory) {
@@ -351,6 +395,19 @@ public class HypixelBedWarsMod {
         }
     }
 
+    private void sendAlert(String message, boolean sound, String soundName) {
+        Minecraft.getMinecraft().thePlayer.addChatMessage(new ChatComponentText(message));
+        
+        if (sound && System.currentTimeMillis() - lastSoundTime > SOUND_COOLDOWN) {
+            if (soundName != null) {
+                Minecraft.getMinecraft().thePlayer.playSound(soundName, 1.0F, 1.0F);
+            } else {
+                Minecraft.getMinecraft().thePlayer.playSound("random.orb", 1.0F, 1.0F);
+            }
+            lastSoundTime = System.currentTimeMillis();
+        }
+    }
+
     /**
      * Checks if two players are on the same team by comparing their name color prefixes
      */
@@ -370,6 +427,28 @@ public class HypixelBedWarsMod {
             return matcher.group(1);
         }
         return null;
+    }
+
+    private static Map<String, EnumChatFormatting> initializeColorMap() {
+        Map<String, EnumChatFormatting> map = new HashMap<>();
+        // Map Minecraft color codes to EnumChatFormatting
+        map.put("0", EnumChatFormatting.BLACK);
+        map.put("1", EnumChatFormatting.DARK_BLUE);
+        map.put("2", EnumChatFormatting.DARK_GREEN);
+        map.put("3", EnumChatFormatting.DARK_AQUA);
+        map.put("4", EnumChatFormatting.DARK_RED);
+        map.put("5", EnumChatFormatting.DARK_PURPLE);
+        map.put("6", EnumChatFormatting.GOLD);
+        map.put("7", EnumChatFormatting.GRAY);
+        map.put("8", EnumChatFormatting.DARK_GRAY);
+        map.put("9", EnumChatFormatting.BLUE);
+        map.put("a", EnumChatFormatting.GREEN);
+        map.put("b", EnumChatFormatting.AQUA);
+        map.put("c", EnumChatFormatting.RED);
+        map.put("d", EnumChatFormatting.LIGHT_PURPLE);
+        map.put("e", EnumChatFormatting.YELLOW);
+        map.put("f", EnumChatFormatting.WHITE);
+        return map;
     }
 
     public class GuiConfigScreen extends GuiScreen {
