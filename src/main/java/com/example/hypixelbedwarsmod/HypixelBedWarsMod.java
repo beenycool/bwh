@@ -22,6 +22,12 @@ import net.minecraftforge.fml.common.Mod;
 import net.minecraftforge.fml.common.event.FMLInitializationEvent;
 import net.minecraftforge.fml.common.eventhandler.SubscribeEvent;
 import net.minecraftforge.fml.common.gameevent.TickEvent;
+import net.minecraftforge.client.event.RenderWorldLastEvent;
+import net.minecraft.entity.item.EntityItem;
+import net.minecraft.util.AxisAlignedBB;
+import org.lwjgl.opengl.GL11;
+import java.util.List;
+import java.util.ArrayList;
 
 import java.io.*;
 import java.util.HashMap;
@@ -58,6 +64,7 @@ public class HypixelBedWarsMod {
     private boolean enablePotionAlerts = true;
     private boolean enableFireballAlerts = true;
     private boolean excludeTeammates = true; // New option to exclude teammates
+    private boolean enableItemESP = true; // New option for item highlighting
 
     // Sound constants for different alerts
     private static final String SOUND_ARMOR = "random.orb";
@@ -67,6 +74,10 @@ public class HypixelBedWarsMod {
     private static final String SOUND_EMERALD = "random.levelup";
     private static final String SOUND_INVIS = "mob.bat.takeoff";
     private static final String SOUND_SPECIAL_ITEM = "random.successful_hit";
+
+    // Colors for item ESP
+    private static final int DIAMOND_COLOR = 0x00AAFF; // Cyan/light blue
+    private static final int EMERALD_COLOR = 0x00FF00; // Green
 
     @Mod.EventHandler
     public void init(FMLInitializationEvent event) {
@@ -111,6 +122,9 @@ public class HypixelBedWarsMod {
                     case "excludeTeammates":
                         excludeTeammates = Boolean.parseBoolean(parts[1]);
                         break;
+                    case "enableItemESP":
+                        enableItemESP = Boolean.parseBoolean(parts[1]);
+                        break;
                 }
             }
         } catch (IOException e) {
@@ -128,6 +142,7 @@ public class HypixelBedWarsMod {
             writer.write("enablePotionAlerts=" + enablePotionAlerts + "\n");
             writer.write("enableFireballAlerts=" + enableFireballAlerts + "\n");
             writer.write("excludeTeammates=" + excludeTeammates + "\n");
+            writer.write("enableItemESP=" + enableItemESP + "\n");
         } catch (IOException e) {
             e.printStackTrace();
         }
@@ -451,6 +466,196 @@ public class HypixelBedWarsMod {
         return map;
     }
 
+    @SubscribeEvent
+    public void onRenderWorld(RenderWorldLastEvent event) {
+        if (!inBedWarsGame || !enableItemESP) return;
+        
+        EntityPlayer player = Minecraft.getMinecraft().thePlayer;
+        World world = Minecraft.getMinecraft().theWorld;
+        
+        if (player == null || world == null) return;
+        
+        // Get all loaded entities
+        List<EntityItem> itemsToRender = new ArrayList<>();
+        
+        for (Entity entity : world.getLoadedEntityList()) {
+            if (!(entity instanceof EntityItem)) continue;
+            
+            EntityItem item = (EntityItem) entity;
+            ItemStack stack = item.getEntityItem();
+            
+            // Only render diamonds and emeralds
+            if (stack != null && (stack.getItem() == Items.diamond || stack.getItem() == Items.emerald)) {
+                itemsToRender.add(item);
+            }
+        }
+        
+        // Render the items
+        renderItemESP(itemsToRender, event.partialTicks);
+    }
+    
+    private void renderItemESP(List<EntityItem> items, float partialTicks) {
+        // Save GL state
+        GL11.glPushMatrix();
+        GL11.glDisable(GL11.GL_TEXTURE_2D);
+        GL11.glDisable(GL11.GL_LIGHTING);
+        GL11.glDisable(GL11.GL_DEPTH_TEST);
+        GL11.glEnable(GL11.GL_BLEND);
+        GL11.glBlendFunc(GL11.GL_SRC_ALPHA, GL11.GL_ONE_MINUS_SRC_ALPHA);
+        GL11.glLineWidth(2.0F);
+        
+        // Get player position for relative rendering
+        EntityPlayer player = Minecraft.getMinecraft().thePlayer;
+        double playerX = player.lastTickPosX + (player.posX - player.lastTickPosX) * partialTicks;
+        double playerY = player.lastTickPosY + (player.posY - player.lastTickPosY) * partialTicks;
+        double playerZ = player.lastTickPosZ + (player.posZ - player.lastTickPosZ) * partialTicks;
+        
+        // Render each item
+        for (EntityItem item : items) {
+            double itemX = item.lastTickPosX + (item.posX - item.lastTickPosX) * partialTicks;
+            double itemY = item.lastTickPosY + (item.posY - item.lastTickPosY) * partialTicks;
+            double itemZ = item.lastTickPosZ + (item.posZ - item.lastTickPosZ) * partialTicks;
+            
+            double relX = itemX - playerX;
+            double relY = itemY - playerY;
+            double relZ = itemZ - playerZ;
+            
+            ItemStack stack = item.getEntityItem();
+            int color = stack.getItem() == Items.diamond ? DIAMOND_COLOR : EMERALD_COLOR;
+            float boxSize = 0.35F; // Size of the box
+            
+            // Draw box
+            drawBox(relX, relY, relZ, boxSize, color);
+            
+            // Draw count text (facing the player)
+            drawItemCount(relX, relY + boxSize + 0.25, relZ, stack.stackSize, color);
+        }
+        
+        // Restore GL state
+        GL11.glDisable(GL11.GL_BLEND);
+        GL11.glEnable(GL11.GL_TEXTURE_2D);
+        GL11.glEnable(GL11.GL_LIGHTING);
+        GL11.glEnable(GL11.GL_DEPTH_TEST);
+        GL11.glPopMatrix();
+    }
+    
+    private void drawBox(double x, double y, double z, float size, int color) {
+        // Extract RGB components
+        float r = ((color >> 16) & 0xFF) / 255.0F;
+        float g = ((color >> 8) & 0xFF) / 255.0F;
+        float b = (color & 0xFF) / 255.0F;
+        
+        GL11.glColor4f(r, g, b, 0.5F); // Semi-transparent
+        
+        // Draw filled box
+        GL11.glBegin(GL11.GL_QUADS);
+        
+        // Bottom face
+        GL11.glVertex3d(x - size, y - size, z - size);
+        GL11.glVertex3d(x + size, y - size, z - size);
+        GL11.glVertex3d(x + size, y - size, z + size);
+        GL11.glVertex3d(x - size, y - size, z + size);
+        
+        // Top face
+        GL11.glVertex3d(x - size, y + size, z - size);
+        GL11.glVertex3d(x - size, y + size, z + size);
+        GL11.glVertex3d(x + size, y + size, z + size);
+        GL11.glVertex3d(x + size, y + size, z - size);
+        
+        // Front face
+        GL11.glVertex3d(x - size, y - size, z + size);
+        GL11.glVertex3d(x + size, y - size, z + size);
+        GL11.glVertex3d(x + size, y + size, z + size);
+        GL11.glVertex3d(x - size, y + size, z + size);
+        
+        // Back face
+        GL11.glVertex3d(x - size, y - size, z - size);
+        GL11.glVertex3d(x - size, y + size, z - size);
+        GL11.glVertex3d(x + size, y + size, z - size);
+        GL11.glVertex3d(x + size, y - size, z - size);
+        
+        // Left face
+        GL11.glVertex3d(x - size, y - size, z - size);
+        GL11.glVertex3d(x - size, y - size, z + size);
+        GL11.glVertex3d(x - size, y + size, z + size);
+        GL11.glVertex3d(x - size, y + size, z - size);
+        
+        // Right face
+        GL11.glVertex3d(x + size, y - size, z - size);
+        GL11.glVertex3d(x + size, y + size, z - size);
+        GL11.glVertex3d(x + size, y + size, z + size);
+        GL11.glVertex3d(x + size, y - size, z + size);
+        
+        GL11.glEnd();
+        
+        // Draw outline with a slightly darker color
+        GL11.glColor4f(r * 0.8F, g * 0.8F, b * 0.8F, 0.8F);
+        GL11.glBegin(GL11.GL_LINES);
+        
+        // Bottom face
+        GL11.glVertex3d(x - size, y - size, z - size);
+        GL11.glVertex3d(x + size, y - size, z - size);
+        GL11.glVertex3d(x + size, y - size, z - size);
+        GL11.glVertex3d(x + size, y - size, z + size);
+        GL11.glVertex3d(x + size, y - size, z + size);
+        GL11.glVertex3d(x - size, y - size, z + size);
+        GL11.glVertex3d(x - size, y - size, z + size);
+        GL11.glVertex3d(x - size, y - size, z - size);
+        
+        // Top face
+        GL11.glVertex3d(x - size, y + size, z - size);
+        GL11.glVertex3d(x + size, y + size, z - size);
+        GL11.glVertex3d(x + size, y + size, z - size);
+        GL11.glVertex3d(x + size, y + size, z + size);
+        GL11.glVertex3d(x + size, y + size, z + size);
+        GL11.glVertex3d(x - size, y + size, z + size);
+        GL11.glVertex3d(x - size, y + size, z + size);
+        GL11.glVertex3d(x - size, y + size, z - size);
+        
+        // Connecting edges
+        GL11.glVertex3d(x - size, y - size, z - size);
+        GL11.glVertex3d(x - size, y + size, z - size);
+        GL11.glVertex3d(x + size, y - size, z - size);
+        GL11.glVertex3d(x + size, y + size, z - size);
+        GL11.glVertex3d(x + size, y - size, z + size);
+        GL11.glVertex3d(x + size, y + size, z + size);
+        GL11.glVertex3d(x - size, y - size, z + size);
+        GL11.glVertex3d(x - size, y + size, z + size);
+        
+        GL11.glEnd();
+    }
+    
+    private void drawItemCount(double x, double y, double z, int count, int color) {
+        // Extract RGB components
+        float r = ((color >> 16) & 0xFF) / 255.0F;
+        float g = ((color >> 8) & 0xFF) / 255.0F;
+        float b = (color & 0xFF) / 255.0F;
+        
+        // Set rendering to face the player
+        GL11.glPushMatrix();
+        GL11.glTranslated(x, y, z);
+        
+        // Make text face the player by applying inverse rotation
+        EntityPlayer player = Minecraft.getMinecraft().thePlayer;
+        GL11.glRotatef(-player.rotationYaw, 0.0F, 1.0F, 0.0F);
+        GL11.glRotatef(player.rotationPitch, 1.0F, 0.0F, 0.0F);
+        GL11.glScalef(-0.025F, -0.025F, 0.025F); // Scale the text to a reasonable size
+        
+        // Re-enable textures for rendering text
+        GL11.glEnable(GL11.GL_TEXTURE_2D);
+        GL11.glDisable(GL11.GL_LIGHTING);
+        
+        // Draw the text centered
+        String text = String.valueOf(count);
+        int textWidth = Minecraft.getMinecraft().fontRendererObj.getStringWidth(text);
+        Minecraft.getMinecraft().fontRendererObj.drawString(text, -textWidth / 2, -4, color | 0xFF000000);
+        
+        // Restore state for continued rendering
+        GL11.glEnable(GL11.GL_LIGHTING);
+        GL11.glDisable(GL11.GL_TEXTURE_2D);
+        GL11.glPopMatrix();
+    }
+
     public class GuiConfigScreen extends GuiScreen {
         private final int BUTTON_WIDTH = 180;
         private final int BUTTON_HEIGHT = 20;
@@ -476,6 +681,8 @@ public class HypixelBedWarsMod {
             buttonList.add(createToggleButton(6, "Fireball Alerts", enableFireballAlerts, y));
             y += BUTTON_HEIGHT + PADDING;
             buttonList.add(createToggleButton(7, "Exclude Teammates", excludeTeammates, y));
+            y += BUTTON_HEIGHT + PADDING;
+            buttonList.add(createToggleButton(8, "Item ESP", enableItemESP, y));
         }
 
         private GuiButton createToggleButton(int id, String text, boolean state, int y) {
@@ -494,6 +701,7 @@ public class HypixelBedWarsMod {
                 case 5: enablePotionAlerts = !enablePotionAlerts; break;
                 case 6: enableFireballAlerts = !enableFireballAlerts; break;
                 case 7: excludeTeammates = !excludeTeammates; break;
+                case 8: enableItemESP = !enableItemESP; break;
             }
             saveConfig();
             initGui();
