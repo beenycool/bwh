@@ -28,6 +28,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
+import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 @Mod(modid = HypixelBedWarsMod.MODID, name = HypixelBedWarsMod.NAME, version = HypixelBedWarsMod.VERSION)
@@ -38,6 +39,9 @@ public class HypixelBedWarsMod {
     private static final Pattern BEDWARS_TITLE = Pattern.compile("BED WARS", Pattern.CASE_INSENSITIVE);
     private static final File CONFIG_FILE = new File("config/bedwars_assistant.cfg");
     private static final String CONFIG_CMD = ".bwconfig";
+    
+    // Team color detection pattern - matches color codes at start of name
+    private static final Pattern TEAM_COLOR_PATTERN = Pattern.compile("§([0-9a-fk-or])");
 
     // State tracking
     private final Map<String, PlayerState> playerStates = new HashMap<>();
@@ -49,6 +53,19 @@ public class HypixelBedWarsMod {
     private boolean enableItemAlerts = true;
     private boolean enableEmeraldAlerts = true;
     private boolean enableInvisAlerts = true;
+    private boolean enableSwordAlerts = true;
+    private boolean enablePotionAlerts = true;
+    private boolean enableFireballAlerts = true;
+    private boolean excludeTeammates = true; // New option to exclude teammates
+
+    // Sound constants for different alerts
+    private static final String SOUND_ARMOR = "random.orb";
+    private static final String SOUND_DIAMOND_SWORD = "random.anvil_use";
+    private static final String SOUND_FIREBALL = "mob.ghast.fireball";
+    private static final String SOUND_POTION = "random.drink";
+    private static final String SOUND_EMERALD = "random.levelup";
+    private static final String SOUND_INVIS = "mob.bat.takeoff";
+    private static final String SOUND_SPECIAL_ITEM = "random.successful_hit";
 
     @Mod.EventHandler
     public void init(FMLInitializationEvent event) {
@@ -81,6 +98,18 @@ public class HypixelBedWarsMod {
                     case "enableInvisAlerts":
                         enableInvisAlerts = Boolean.parseBoolean(parts[1]);
                         break;
+                    case "enableSwordAlerts":
+                        enableSwordAlerts = Boolean.parseBoolean(parts[1]);
+                        break;
+                    case "enablePotionAlerts":
+                        enablePotionAlerts = Boolean.parseBoolean(parts[1]);
+                        break;
+                    case "enableFireballAlerts":
+                        enableFireballAlerts = Boolean.parseBoolean(parts[1]);
+                        break;
+                    case "excludeTeammates":
+                        excludeTeammates = Boolean.parseBoolean(parts[1]);
+                        break;
                 }
             }
         } catch (IOException e) {
@@ -94,6 +123,10 @@ public class HypixelBedWarsMod {
             writer.write("enableItemAlerts=" + enableItemAlerts + "\n");
             writer.write("enableEmeraldAlerts=" + enableEmeraldAlerts + "\n");
             writer.write("enableInvisAlerts=" + enableInvisAlerts + "\n");
+            writer.write("enableSwordAlerts=" + enableSwordAlerts + "\n");
+            writer.write("enablePotionAlerts=" + enablePotionAlerts + "\n");
+            writer.write("enableFireballAlerts=" + enableFireballAlerts + "\n");
+            writer.write("excludeTeammates=" + excludeTeammates + "\n");
         } catch (IOException e) {
             e.printStackTrace();
         }
@@ -138,7 +171,7 @@ public class HypixelBedWarsMod {
             if (!(entity instanceof EntityPlayer) || entity == localPlayer) continue;
 
             EntityPlayer player = (EntityPlayer) entity;
-            processPlayer(player);
+            processPlayer(player, localPlayer);
         }
     }
 
@@ -153,8 +186,14 @@ public class HypixelBedWarsMod {
         inBedWarsGame = sidebar != null && BEDWARS_TITLE.matcher(sidebar.getDisplayName()).find();
     }
 
-    private void processPlayer(EntityPlayer player) {
+    // Modified to include localPlayer for team checks
+    private void processPlayer(EntityPlayer player, EntityPlayer localPlayer) {
         if (isRespawning(player)) return; // Skip respawning players
+        
+        // Skip teammates if the option is enabled
+        if (excludeTeammates && isSameTeam(player, localPlayer)) {
+            return;
+        }
 
         String playerName = player.getDisplayName().getUnformattedText();
         PlayerState state = playerStates.computeIfAbsent(playerName, k -> new PlayerState());
@@ -163,6 +202,9 @@ public class HypixelBedWarsMod {
         if (enableItemAlerts) checkHeldItem(player, state);
         if (enableEmeraldAlerts) checkEmeralds(player, state);
         if (enableInvisAlerts) checkInvisibility(player, state);
+        if (enableSwordAlerts) checkDiamondSword(player, state);
+        if (enablePotionAlerts) checkPotions(player, state);
+        if (enableFireballAlerts && enableItemAlerts) checkFireball(player, state);
     }
 
     private void checkArmor(EntityPlayer player, PlayerState state) {
@@ -177,56 +219,87 @@ public class HypixelBedWarsMod {
             int remaining = Math.max(currentEmeralds - 6, 0);
             sendAlert(EnumChatFormatting.YELLOW + player.getName() +
                     EnumChatFormatting.AQUA + " bought Diamond Armor! (" +
-                    remaining + " Emeralds remaining)", true);
+                    remaining + " Emeralds remaining)", true, SOUND_ARMOR);
             detectedPlayers.add(player.getName());
         }
     }
 
     private void checkHeldItem(EntityPlayer player, PlayerState state) {
         ItemStack heldStack = player.getHeldItem();
-        if (heldStack == null) return;
+        if (heldStack == null) {
+            state.lastHeldItem = null;
+            return;
+        }
 
         Item currentItem = heldStack.getItem();
         if (currentItem != state.lastHeldItem) {
             state.lastHeldItem = currentItem;
-            if (currentItem == Items.bow || currentItem == Items.ender_pearl ||
-                currentItem == Item.getItemFromBlock(Blocks.obsidian) || currentItem == Items.spawn_egg) {
+            
+            // Only alert for specific items when they're first held
+            if (currentItem == Items.bow) {
                 sendAlert(EnumChatFormatting.YELLOW + player.getName() +
-                        EnumChatFormatting.AQUA + " is holding " +
-                        heldStack.getDisplayName() + " " +
+                        EnumChatFormatting.AQUA + " is holding a BOW " +
+                        getDistanceString(player), true, SOUND_SPECIAL_ITEM);
+            } else if (currentItem == Items.ender_pearl) {
+                    EnumChatFormatting.AQUA + " has a DIAMOND SWORD! " +
+                    getDistanceString(player), true);
+        } else if (currentItem != Items.diamond_sword) {
+            state.lastHeldDiamondSword = false;
+        }
+    }
+    
+    private void checkFireball(EntityPlayer player, PlayerState state) {
+        ItemStack heldStack = player.getHeldItem();
+        if (heldStack == null) return;
+        
+        Item currentItem = heldStack.getItem();
+        if (currentItem == Items.fire_charge && !state.wasHoldingFireball) {
+            state.wasHoldingFireball = true;
+            sendAlert(EnumChatFormatting.YELLOW + player.getName() +
+                    EnumChatFormatting.RED + " is holding a FIREBALL! " +
+                    getDistanceString(player), true);
+        } else if (currentItem != Items.fire_charge) {
+            state.wasHoldingFireball = false;
+        }
+    }
+    
+    private void checkPotions(EntityPlayer player, PlayerState state) {
+        Map<Integer, Boolean> currentPotions = new HashMap<>();
+        
+        for (PotionEffect effect : player.getActivePotionEffects()) {
+            int id = effect.getPotionID();
+            currentPotions.put(id, true);
+            
+            // Alert for newly acquired potions
+            if (!state.activePotions.containsKey(id)) {
+                String potionName = getPotionName(id);
+                sendAlert(EnumChatFormatting.YELLOW + player.getName() +
+                        EnumChatFormatting.LIGHT_PURPLE + " drank " + potionName + "! " +
                         getDistanceString(player), true);
             }
         }
-    }
-
-    private void checkEmeralds(EntityPlayer player, PlayerState state) {
-        int current = countEmeralds(player.inventory);
-        if (current > state.lastEmeralds) {
-            sendAlert(EnumChatFormatting.YELLOW + player.getName() +
-                    EnumChatFormatting.AQUA + " collected " +
-                    (current - state.lastEmeralds) + " Emerald(s)" +
-                    getDistanceString(player), true);
-            state.lastEmeralds = current;
-        }
-    }
-
-    private void checkInvisibility(EntityPlayer player, PlayerState state) {
-        boolean hasInvis = false;
-        for (PotionEffect effect : player.getActivePotionEffects()) {
-            if (effect.getPotionID() == Potion.invisibility.getId() && 
-                effect.getDuration() > 590 && effect.getDuration() <= 600) { // 29.5-30 seconds
-                hasInvis = true;
-                break;
+        
+        // Check for expired potions
+        for (Map.Entry<Integer, Boolean> entry : state.activePotions.entrySet()) {
+            if (!currentPotions.containsKey(entry.getKey())) {
+                String potionName = getPotionName(entry.getKey());
+                sendAlert(EnumChatFormatting.YELLOW + player.getName() +
+                        EnumChatFormatting.GRAY + "'s " + potionName + " wore off. " +
+                        getDistanceString(player), false);
             }
         }
-
-        if (hasInvis != state.wasInvisible) {
-            state.wasInvisible = hasInvis;
-            sendAlert(EnumChatFormatting.YELLOW + player.getName() +
-                    (hasInvis ? EnumChatFormatting.AQUA + " is invisible!" :
-                            EnumChatFormatting.AQUA + " is visible again!") +
-                    getDistanceString(player), true);
-        }
+        
+        state.activePotions = currentPotions;
+    }
+    
+    private String getPotionName(int id) {
+        if (id == Potion.moveSpeed.getId()) return "Speed";
+        if (id == Potion.jump.getId()) return "Jump Boost";
+        if (id == Potion.invisibility.getId()) return "Invisibility";
+        if (id == Potion.resistance.getId()) return "Resistance";
+        if (id == Potion.regeneration.getId()) return "Regeneration";
+        if (id == Potion.damageBoost.getId()) return "Strength";
+        return "Potion Effect";
     }
 
     private int countEmeralds(InventoryPlayer inventory) {
@@ -278,6 +351,27 @@ public class HypixelBedWarsMod {
         }
     }
 
+    /**
+     * Checks if two players are on the same team by comparing their name color prefixes
+     */
+    private boolean isSameTeam(EntityPlayer player1, EntityPlayer player2) {
+        String team1 = getTeamColor(player1.getDisplayName().getFormattedText());
+        String team2 = getTeamColor(player2.getDisplayName().getFormattedText());
+        return team1 != null && team1.equals(team2);
+    }
+    
+    /**
+     * Extracts the team color code from a player's formatted name
+     * @return The color code or null if no color code found
+     */
+    private String getTeamColor(String formattedName) {
+        Matcher matcher = TEAM_COLOR_PATTERN.matcher(formattedName);
+        if (matcher.find()) {
+            return matcher.group(1);
+        }
+        return null;
+    }
+
     public class GuiConfigScreen extends GuiScreen {
         private final int BUTTON_WIDTH = 180;
         private final int BUTTON_HEIGHT = 20;
@@ -295,6 +389,14 @@ public class HypixelBedWarsMod {
             buttonList.add(createToggleButton(2, "Emerald Alerts", enableEmeraldAlerts, y));
             y += BUTTON_HEIGHT + PADDING;
             buttonList.add(createToggleButton(3, "Invisibility Alerts", enableInvisAlerts, y));
+            y += BUTTON_HEIGHT + PADDING;
+            buttonList.add(createToggleButton(4, "Diamond Sword Alerts", enableSwordAlerts, y));
+            y += BUTTON_HEIGHT + PADDING;
+            buttonList.add(createToggleButton(5, "Potion Alerts", enablePotionAlerts, y));
+            y += BUTTON_HEIGHT + PADDING;
+            buttonList.add(createToggleButton(6, "Fireball Alerts", enableFireballAlerts, y));
+            y += BUTTON_HEIGHT + PADDING;
+            buttonList.add(createToggleButton(7, "Exclude Teammates", excludeTeammates, y));
         }
 
         private GuiButton createToggleButton(int id, String text, boolean state, int y) {
@@ -309,6 +411,10 @@ public class HypixelBedWarsMod {
                 case 1: enableItemAlerts = !enableItemAlerts; break;
                 case 2: enableEmeraldAlerts = !enableEmeraldAlerts; break;
                 case 3: enableInvisAlerts = !enableInvisAlerts; break;
+                case 4: enableSwordAlerts = !enableSwordAlerts; break;
+                case 5: enablePotionAlerts = !enablePotionAlerts; break;
+                case 6: enableFireballAlerts = !enableFireballAlerts; break;
+                case 7: excludeTeammates = !excludeTeammates; break;
             }
             saveConfig();
             initGui();
@@ -326,6 +432,9 @@ public class HypixelBedWarsMod {
         int lastEmeralds = 0;
         boolean wasInvisible = false;
         Item lastHeldItem = null;
+        boolean lastHeldDiamondSword = false;
+        boolean wasHoldingFireball = false;
+        Map<Integer, Boolean> activePotions = new HashMap<>();
     }
 
     private boolean isHypixelBedWars() {
