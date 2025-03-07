@@ -65,6 +65,8 @@ public class HypixelBedWarsMod {
     private boolean enableFireballAlerts = true;
     private boolean excludeTeammates = true; // New option to exclude teammates
     private boolean enableItemESP = true; // New option for item highlighting
+    private float itemESPMaxDistance = 40.0F; // new config
+    private float itemESPFadeRange = 30.0F;   // new config
 
     // Sound constants for different alerts
     private static final String SOUND_ARMOR = "random.orb";
@@ -125,6 +127,12 @@ public class HypixelBedWarsMod {
                     case "enableItemESP":
                         enableItemESP = Boolean.parseBoolean(parts[1]);
                         break;
+                    case "itemESPMaxDistance":
+                        itemESPMaxDistance = Float.parseFloat(parts[1]);
+                        break;
+                    case "itemESPFadeRange":
+                        itemESPFadeRange = Float.parseFloat(parts[1]);
+                        break;
                 }
             }
         } catch (IOException e) {
@@ -143,6 +151,8 @@ public class HypixelBedWarsMod {
             writer.write("enableFireballAlerts=" + enableFireballAlerts + "\n");
             writer.write("excludeTeammates=" + excludeTeammates + "\n");
             writer.write("enableItemESP=" + enableItemESP + "\n");
+            writer.write("itemESPMaxDistance=" + itemESPMaxDistance + "\n");
+            writer.write("itemESPFadeRange=" + itemESPFadeRange + "\n");
         } catch (IOException e) {
             e.printStackTrace();
         }
@@ -525,7 +535,9 @@ public class HypixelBedWarsMod {
             float boxSize = 0.35F; // Size of the box
             
             float distance = player.getDistanceToEntity(item);
-            float alpha = 1.0F - (distance / 30.0F);
+            if (distance > itemESPMaxDistance) continue; // skip distant items
+
+            float alpha = 1.0F - (distance / itemESPFadeRange);
             alpha = Math.max(0.2F, Math.min(1.0F, alpha)); // clamp between 0.2 and 1.0
 
             drawBox(relX, relY, relZ, boxSize, color, alpha);
