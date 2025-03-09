@@ -70,7 +70,6 @@ public class HypixelBedWarsMod {
     private boolean enableArmorAlerts = true;
     private boolean enableItemAlerts = true;
     private boolean enableEmeraldAlerts = true;
-    private boolean enableInvisAlerts = true;
     private boolean enableSwordAlerts = true;
     private boolean enablePotionAlerts = true;
     private boolean enableFireballAlerts = true;
@@ -85,7 +84,6 @@ public class HypixelBedWarsMod {
     private static final String SOUND_FIREBALL = "mob.ghast.fireball";
     private static final String SOUND_POTION = "random.drink";
     private static final String SOUND_EMERALD = "random.levelup";
-    private static final String SOUND_INVIS = "mob.bat.takeoff";
     private static final String SOUND_SPECIAL_ITEM = "random.successful_hit";
 
     // Colors for item ESP
@@ -120,9 +118,6 @@ public class HypixelBedWarsMod {
                     case "enableEmeraldAlerts":
                         enableEmeraldAlerts = Boolean.parseBoolean(parts[1]);
                         break;
-                    case "enableInvisAlerts":
-                        enableInvisAlerts = Boolean.parseBoolean(parts[1]);
-                        break;
                     case "enableSwordAlerts":
                         enableSwordAlerts = Boolean.parseBoolean(parts[1]);
                         break;
@@ -156,7 +151,6 @@ public class HypixelBedWarsMod {
             writer.write("enableArmorAlerts=" + enableArmorAlerts + "\n");
             writer.write("enableItemAlerts=" + enableItemAlerts + "\n");
             writer.write("enableEmeraldAlerts=" + enableEmeraldAlerts + "\n");
-            writer.write("enableInvisAlerts=" + enableInvisAlerts + "\n");
             writer.write("enableSwordAlerts=" + enableSwordAlerts + "\n");
             writer.write("enablePotionAlerts=" + enablePotionAlerts + "\n");
             writer.write("enableFireballAlerts=" + enableFireballAlerts + "\n");
@@ -305,7 +299,6 @@ public class HypixelBedWarsMod {
         if (enableArmorAlerts) checkArmor(player, state);
         if (enableItemAlerts) checkHeldItem(player, state);
         if (enableEmeraldAlerts) checkEmeralds(player, state);
-        if (enableInvisAlerts) checkInvisibility(player, state);
         if (enableSwordAlerts) checkDiamondSword(player, state);
         if (enablePotionAlerts) checkPotions(player, state);
         if (enableFireballAlerts && enableItemAlerts) checkFireball(player, state);
@@ -407,10 +400,16 @@ public class HypixelBedWarsMod {
                 
                 // Alert for newly acquired potions
                 if (!state.activePotions.containsKey(id)) {
-                    String potionName = getPotionName(id);
-                    sendAlert(getColoredPlayerName(player) +
-                            EnumChatFormatting.LIGHT_PURPLE + " drank " + potionName + "! " +
-                            getDistanceString(player), true, SOUND_POTION);
+                    long now = System.currentTimeMillis();
+                    // Only alert if last alert was over 10 seconds ago
+                    if (!state.potionAlertTimestamps.containsKey(id) 
+                            || now - state.potionAlertTimestamps.get(id) > 10000) {
+                        String potionName = getPotionName(id);
+                        sendAlert(getColoredPlayerName(player) +
+                                EnumChatFormatting.LIGHT_PURPLE + " drank " + potionName + "! " +
+                                getDistanceString(player), true, SOUND_POTION);
+                        state.potionAlertTimestamps.put(id, now);
+                    }
                 }
             }
         }
@@ -426,31 +425,6 @@ public class HypixelBedWarsMod {
         }
         
         state.activePotions = currentPotions;
-    }
-    
-    private void checkInvisibility(EntityPlayer player, PlayerState state) {
-        boolean isInvisible = player.isInvisible();
-        if (isInvisible && !state.wasInvisible) {
-            state.wasInvisible = true;
-            sendAlert(getColoredPlayerName(player) +
-                    EnumChatFormatting.DARK_PURPLE + " is now INVISIBLE! " +
-                    getDistanceString(player), true, SOUND_INVIS);
-        } else if (!isInvisible && state.wasInvisible) {
-            state.wasInvisible = false;
-            sendAlert(getColoredPlayerName(player) +
-                    EnumChatFormatting.GRAY + " is no longer invisible. " +
-                    getDistanceString(player), false, null);
-        }
-    }
-    
-    private void checkEmeralds(EntityPlayer player, PlayerState state) {
-        int emeralds = countEmeralds(player.inventory);
-        if (emeralds >= 4 && emeralds > state.lastEmeralds) {
-            sendAlert(getColoredPlayerName(player) +
-                    EnumChatFormatting.GREEN + " has " + emeralds + " emeralds! " +
-                    getDistanceString(player), true, SOUND_EMERALD);
-        }
-        state.lastEmeralds = emeralds;
     }
     
     /**
@@ -627,7 +601,7 @@ public class HypixelBedWarsMod {
 
     @SubscribeEvent
     public void onRenderWorld(RenderWorldLastEvent event) {
-        if (!inBedWarsGame || !enableItemESP) return;
+        if (!enableItemESP) return;
         
         EntityPlayer player = Minecraft.getMinecraft().thePlayer;
         World world = Minecraft.getMinecraft().theWorld;
@@ -654,6 +628,7 @@ public class HypixelBedWarsMod {
     }
     
     private void renderItemESP(List<EntityItem> items, float partialTicks) {
+        GL11.glPushAttrib(GL11.GL_ALL_ATTRIB_BITS); // Preserve all OpenGL settings
         // Save GL state
         GL11.glPushMatrix();
         GL11.glDisable(GL11.GL_TEXTURE_2D);
@@ -661,7 +636,7 @@ public class HypixelBedWarsMod {
         GL11.glDisable(GL11.GL_DEPTH_TEST);
         GL11.glEnable(GL11.GL_BLEND);
         GL11.glBlendFunc(GL11.GL_SRC_ALPHA, GL11.GL_ONE_MINUS_SRC_ALPHA);
-        GL11.glLineWidth(2.0F);
+        GL11.glLineWidth(1.5F); // Thinner lines for a cleaner look
         
         // Get player position for relative rendering
         EntityPlayer player = Minecraft.getMinecraft().thePlayer;
@@ -690,7 +665,8 @@ public class HypixelBedWarsMod {
             alpha = Math.max(0.2F, Math.min(1.0F, alpha)); // clamp between 0.2 and 1.0
 
             drawBox(relX, relY, relZ, boxSize, color, alpha);
-            drawItemCount(relX, relY + boxSize + 0.25, relZ, stack.stackSize, color);
+            int actualCount = stack != null ? stack.stackSize : 0;
+            drawItemCount(relX, relY, relZ, actualCount, color);
         }
         
         // Restore GL state
@@ -699,6 +675,7 @@ public class HypixelBedWarsMod {
         GL11.glEnable(GL11.GL_LIGHTING);
         GL11.glEnable(GL11.GL_DEPTH_TEST);
         GL11.glPopMatrix();
+        GL11.glPopAttrib(); // Restore previous OpenGL settings
     }
     
     private void drawBox(double x, double y, double z, float size, int color, float alpha) {
@@ -808,9 +785,11 @@ public class HypixelBedWarsMod {
         GL11.glDisable(GL11.GL_LIGHTING);
         
         // Draw the text centered
-        String text = String.valueOf(count);
+        String text = "x" + count;
         int textWidth = Minecraft.getMinecraft().fontRendererObj.getStringWidth(text);
-        Minecraft.getMinecraft().fontRendererObj.drawString(text, -textWidth / 2, -4, color | 0xFF000000);
+        Minecraft.getMinecraft().fontRendererObj.drawString(text, -textWidth / 2,
+            -Minecraft.getMinecraft().fontRendererObj.FONT_HEIGHT / 2,
+            color | 0xFF000000);
         
         // Restore state for continued rendering
         GL11.glEnable(GL11.GL_LIGHTING);
@@ -839,17 +818,15 @@ public class HypixelBedWarsMod {
             y += BUTTON_HEIGHT + PADDING;
             buttonList.add(createToggleButton(2, "Emerald Alerts", enableEmeraldAlerts, y));
             y += BUTTON_HEIGHT + PADDING;
-            buttonList.add(createToggleButton(3, "Invisibility Alerts", enableInvisAlerts, y));
+            buttonList.add(createToggleButton(3, "Diamond Sword Alerts", enableSwordAlerts, y));
             y += BUTTON_HEIGHT + PADDING;
-            buttonList.add(createToggleButton(4, "Diamond Sword Alerts", enableSwordAlerts, y));
+            buttonList.add(createToggleButton(4, "Potion Alerts", enablePotionAlerts, y));
             y += BUTTON_HEIGHT + PADDING;
-            buttonList.add(createToggleButton(5, "Potion Alerts", enablePotionAlerts, y));
+            buttonList.add(createToggleButton(5, "Fireball Alerts", enableFireballAlerts, y));
             y += BUTTON_HEIGHT + PADDING;
-            buttonList.add(createToggleButton(6, "Fireball Alerts", enableFireballAlerts, y));
+            buttonList.add(createToggleButton(6, "Exclude Teammates", excludeTeammates, y));
             y += BUTTON_HEIGHT + PADDING;
-            buttonList.add(createToggleButton(7, "Exclude Teammates", excludeTeammates, y));
-            y += BUTTON_HEIGHT + PADDING;
-            buttonList.add(createToggleButton(8, "Item ESP", enableItemESP, y));
+            buttonList.add(createToggleButton(7, "Item ESP", enableItemESP, y));
             y += BUTTON_HEIGHT + PADDING;
 
             // Team Status Section
@@ -890,12 +867,11 @@ public class HypixelBedWarsMod {
                 case 0: enableArmorAlerts = !enableArmorAlerts; break;
                 case 1: enableItemAlerts = !enableItemAlerts; break;
                 case 2: enableEmeraldAlerts = !enableEmeraldAlerts; break;
-                case 3: enableInvisAlerts = !enableInvisAlerts; break;
-                case 4: enableSwordAlerts = !enableSwordAlerts; break;
-                case 5: enablePotionAlerts = !enablePotionAlerts; break;
-                case 6: enableFireballAlerts = !enableFireballAlerts; break;
-                case 7: excludeTeammates = !excludeTeammates; break;
-                case 8: enableItemESP = !enableItemESP; break;
+                case 3: enableSwordAlerts = !enableSwordAlerts; break;
+                case 4: enablePotionAlerts = !enablePotionAlerts; break;
+                case 5: enableFireballAlerts = !enableFireballAlerts; break;
+                case 6: excludeTeammates = !excludeTeammates; break;
+                case 7: enableItemESP = !enableItemESP; break;
             }
             saveConfig();
             initGui();
@@ -936,24 +912,64 @@ public class HypixelBedWarsMod {
     }
 
     private static class PlayerState {
-        int lastEmeralds = 0;
-        boolean wasInvisible = false;
-        Item lastHeldItem = null;
-        boolean lastHeldDiamondSword = false;
-        boolean wasHoldingFireball = false;
-        Map<Integer, Boolean> activePotions = new HashMap<>();
+        public Item lastHeldItem = null;
+        public boolean lastHeldDiamondSword = false;
+        public boolean wasHoldingFireball = false;
+        public int lastEmeralds = 0;
+        public Map<Integer, Boolean> activePotions = new HashMap<>();
+        public Map<Integer, Long> potionAlertTimestamps = new HashMap<>();
+    }
+
+    private String getPotionName(int potionId) {
+        switch (potionId) {
+            case SPEED_POTION_ID: return "Speed";
+            case JUMP_BOOST_POTION_ID: return "Jump Boost";
+            default: return "Unknown Potion";
+        }
     }
 
     private boolean isHypixelBedWars() {
         return Minecraft.getMinecraft().getCurrentServerData() != null &&
-                Minecraft.getMinecraft().getCurrentServerData().serverIP.toLowerCase().contains("hypixel");
+               Minecraft.getMinecraft().getCurrentServerData().serverIP.toLowerCase().contains("hypixel.net");
     }
 
-    private String getPotionName(int potionId) {
-        Potion potion = Potion.potionTypes[potionId];
-        if (potion != null) {
-            return potion.getName();
+    private static class Team {
+        private final String color;
+        private final EnumChatFormatting formatting;
+        private final Set<String> players = new HashSet<>();
+        private boolean hasBed = true;
+
+        public Team(String color, EnumChatFormatting formatting) {
+            this.color = color;
+            this.formatting = formatting;
         }
-        return "Unknown Potion";
+
+        public String getColor() {
+            return color;
+        }
+
+        public EnumChatFormatting getFormatting() {
+            return formatting;
+        }
+
+        public Set<String> getPlayers() {
+            return players;
+        }
+
+        public boolean hasBed() {
+            return hasBed;
+        }
+
+        public void setBedState(boolean hasBed) {
+            this.hasBed = hasBed;
+        }
+
+        public void addPlayer(String playerName) {
+            players.add(playerName);
+        }
+
+        public void removePlayer(String playerName) {
+            players.remove(playerName);
+        }
     }
 }
