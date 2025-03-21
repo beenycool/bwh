@@ -315,6 +315,9 @@ public class HypixelBedWarsMod {
                 }
             }
         }
+
+        // Check for obsidian blocks
+        if (enableItemAlerts) checkObsidian(player, state);
     }
 
     private void checkArmor(EntityPlayer player, PlayerState state) {
@@ -427,6 +430,28 @@ public class HypixelBedWarsMod {
         state.activePotions = currentPotions;
     }
     
+    private void checkObsidian(EntityPlayer player, PlayerState state) {
+        if (player.worldObj == null) return;
+
+        int radius = 5; // Define the radius to check for obsidian blocks
+        int playerX = (int) player.posX;
+        int playerY = (int) player.posY;
+        int playerZ = (int) player.posZ;
+
+        for (int x = playerX - radius; x <= playerX + radius; x++) {
+            for (int y = playerY - radius; y <= playerY + radius; y++) {
+                for (int z = playerZ - radius; z <= playerZ + radius; z++) {
+                    if (player.worldObj.getBlock(x, y, z) == Blocks.obsidian) {
+                        sendAlert(getColoredPlayerName(player) +
+                                EnumChatFormatting.DARK_PURPLE + " has placed OBSIDIAN! " +
+                                getDistanceString(player), true, "random.anvil_land");
+                        return;
+                    }
+                }
+            }
+        }
+    }
+
     /**
      * Gets the player's name with their team color applied
      */
