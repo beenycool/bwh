@@ -939,4 +939,11 @@ public class HypixelBedWarsMod {
         }
     }
 
-    private static class PlayerState
+    private static class PlayerState {
+        private Item lastHeldItem;
+        private boolean lastHeldDiamondSword;
+        private boolean wasHoldingFireball;
+        private int lastEmeralds;
+        private Map<Integer, Boolean> activePotions = new HashMap<>();
+    }
+}
