@@ -447,7 +447,8 @@ public class HypixelBedWarsMod {
         for (int x = playerX - radius; x <= playerX + radius; x++) {
             for (int y = playerY - radius; y <= playerY + radius; y++) {
                 for (int z = playerZ - radius; z <= playerZ + radius; z++) {
-                    if (player.worldObj.getBlock(x, y, z) == Blocks.obsidian) {
+                    // Fixed method to get blocks in Forge 1.8.9
+                    if (player.worldObj.getBlockState(new net.minecraft.util.BlockPos(x, y, z)).getBlock() == Blocks.obsidian) {
                         sendAlert(getColoredPlayerName(player) +
                                 EnumChatFormatting.DARK_PURPLE + " has placed OBSIDIAN! " +
                                 getDistanceString(player), true, "random.anvil_land");
@@ -945,5 +946,26 @@ public class HypixelBedWarsMod {
         private boolean wasHoldingFireball;
         private int lastEmeralds;
         private Map<Integer, Boolean> activePotions = new HashMap<>();
+    }
+
+    /**
+     * Checks if the player is currently in a Hypixel Bed Wars game
+     */
+    private boolean isHypixelBedWars() {
+        return inBedWarsGame;
+    }
+
+    /**
+     * Gets the readable name of a potion effect by its ID
+     */
+    private String getPotionName(int potionId) {
+        switch (potionId) {
+            case SPEED_POTION_ID:
+                return "Speed Potion";
+            case JUMP_BOOST_POTION_ID:
+                return "Jump Potion";
+            default:
+                return "Potion";
+        }
     }
 }
