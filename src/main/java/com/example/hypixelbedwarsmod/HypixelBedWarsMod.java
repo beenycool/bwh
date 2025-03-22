@@ -75,8 +75,8 @@ public class HypixelBedWarsMod {
     private boolean enableFireballAlerts = true;
     private boolean excludeTeammates = true; // New option to exclude teammates
     private boolean enableItemESP = true; // New option for item highlighting
-    private float itemESPMaxDistance = 40.0F; // new config
-    private float itemESPFadeRange = 30.0F;   // new config
+    private float itemESPMaxDistance = 80.0F; // new config
+    private float itemESPFadeRange = 60.0F;   // new config
 
     // Sound constants for different alerts
     private static final String SOUND_ARMOR = "random.orb";
