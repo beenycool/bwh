@@ -84,6 +84,7 @@ public class HypixelBedWarsMod {
     private static final String SOUND_FIREBALL = "mob.ghast.fireball";
     private static final String SOUND_POTION = "random.drink";
     private static final String SOUND_EMERALD = "random.levelup";
+    private static final String SOUND_INVIS = "mob.bat.takeoff";
     private static final String SOUND_SPECIAL_ITEM = "random.successful_hit";
 
     // Colors for item ESP
@@ -400,16 +401,10 @@ public class HypixelBedWarsMod {
                 
                 // Alert for newly acquired potions
                 if (!state.activePotions.containsKey(id)) {
-                    long now = System.currentTimeMillis();
-                    // Only alert if last alert was over 10 seconds ago
-                    if (!state.potionAlertTimestamps.containsKey(id) 
-                            || now - state.potionAlertTimestamps.get(id) > 10000) {
-                        String potionName = getPotionName(id);
-                        sendAlert(getColoredPlayerName(player) +
-                                EnumChatFormatting.LIGHT_PURPLE + " drank " + potionName + "! " +
-                                getDistanceString(player), true, SOUND_POTION);
-                        state.potionAlertTimestamps.put(id, now);
-                    }
+                    String potionName = getPotionName(id);
+                    sendAlert(getColoredPlayerName(player) +
+                            EnumChatFormatting.LIGHT_PURPLE + " drank " + potionName + "! " +
+                            getDistanceString(player), true, SOUND_POTION);
                 }
             }
         }
@@ -425,6 +420,16 @@ public class HypixelBedWarsMod {
         }
         
         state.activePotions = currentPotions;
+    }
+    
+    private void checkEmeralds(EntityPlayer player, PlayerState state) {
+        int emeralds = countEmeralds(player.inventory);
+        if (emeralds >= 4 && emeralds > state.lastEmeralds) {
+            sendAlert(getColoredPlayerName(player) +
+                    EnumChatFormatting.GREEN + " has " + emeralds + " emeralds! " +
+                    getDistanceString(player), true, SOUND_EMERALD);
+        }
+        state.lastEmeralds = emeralds;
     }
     
     /**
@@ -628,7 +633,6 @@ public class HypixelBedWarsMod {
     }
     
     private void renderItemESP(List<EntityItem> items, float partialTicks) {
-        GL11.glPushAttrib(GL11.GL_ALL_ATTRIB_BITS); // Preserve all OpenGL settings
         // Save GL state
         GL11.glPushMatrix();
         GL11.glDisable(GL11.GL_TEXTURE_2D);
@@ -636,7 +640,7 @@ public class HypixelBedWarsMod {
         GL11.glDisable(GL11.GL_DEPTH_TEST);
         GL11.glEnable(GL11.GL_BLEND);
         GL11.glBlendFunc(GL11.GL_SRC_ALPHA, GL11.GL_ONE_MINUS_SRC_ALPHA);
-        GL11.glLineWidth(1.5F); // Thinner lines for a cleaner look
+        GL11.glLineWidth(2.0F);
         
         // Get player position for relative rendering
         EntityPlayer player = Minecraft.getMinecraft().thePlayer;
@@ -665,8 +669,7 @@ public class HypixelBedWarsMod {
             alpha = Math.max(0.2F, Math.min(1.0F, alpha)); // clamp between 0.2 and 1.0
 
             drawBox(relX, relY, relZ, boxSize, color, alpha);
-            int actualCount = stack != null ? stack.stackSize : 0;
-            drawItemCount(relX, relY, relZ, actualCount, color);
+            drawItemCount(relX, relY, relZ, stack.stackSize, color);
         }
         
         // Restore GL state
@@ -675,7 +678,6 @@ public class HypixelBedWarsMod {
         GL11.glEnable(GL11.GL_LIGHTING);
         GL11.glEnable(GL11.GL_DEPTH_TEST);
         GL11.glPopMatrix();
-        GL11.glPopAttrib(); // Restore previous OpenGL settings
     }
     
     private void drawBox(double x, double y, double z, float size, int color, float alpha) {
@@ -785,7 +787,7 @@ public class HypixelBedWarsMod {
         GL11.glDisable(GL11.GL_LIGHTING);
         
         // Draw the text centered
-        String text = "x" + count;
+        String text = String.valueOf(count);
         int textWidth = Minecraft.getMinecraft().fontRendererObj.getStringWidth(text);
         Minecraft.getMinecraft().fontRendererObj.drawString(text, -textWidth / 2,
             -Minecraft.getMinecraft().fontRendererObj.FONT_HEIGHT / 2,
@@ -911,65 +913,4 @@ public class HypixelBedWarsMod {
         }
     }
 
-    private static class PlayerState {
-        public Item lastHeldItem = null;
-        public boolean lastHeldDiamondSword = false;
-        public boolean wasHoldingFireball = false;
-        public int lastEmeralds = 0;
-        public Map<Integer, Boolean> activePotions = new HashMap<>();
-        public Map<Integer, Long> potionAlertTimestamps = new HashMap<>();
-    }
-
-    private String getPotionName(int potionId) {
-        switch (potionId) {
-            case SPEED_POTION_ID: return "Speed";
-            case JUMP_BOOST_POTION_ID: return "Jump Boost";
-            default: return "Unknown Potion";
-        }
-    }
-
-    private boolean isHypixelBedWars() {
-        return Minecraft.getMinecraft().getCurrentServerData() != null &&
-               Minecraft.getMinecraft().getCurrentServerData().serverIP.toLowerCase().contains("hypixel.net");
-    }
-
-    private static class Team {
-        private final String color;
-        private final EnumChatFormatting formatting;
-        private final Set<String> players = new HashSet<>();
-        private boolean hasBed = true;
-
-        public Team(String color, EnumChatFormatting formatting) {
-            this.color = color;
-            this.formatting = formatting;
-        }
-
-        public String getColor() {
-            return color;
-        }
-
-        public EnumChatFormatting getFormatting() {
-            return formatting;
-        }
-
-        public Set<String> getPlayers() {
-            return players;
-        }
-
-        public boolean hasBed() {
-            return hasBed;
-        }
-
-        public void setBedState(boolean hasBed) {
-            this.hasBed = hasBed;
-        }
-
-        public void addPlayer(String playerName) {
-            players.add(playerName);
-        }
-
-        public void removePlayer(String playerName) {
-            players.remove(playerName);
-        }
-    }
-}
+    private static class PlayerState
