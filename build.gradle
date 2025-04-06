@@ -26,7 +26,9 @@ compileJava {
     sourceCompatibility = targetCompatibility = '1.8'
 }
 
-dependencies {} // Add dependencies here if needed
+dependencies {
+    implementation 'net.minecraftforge:forge:1.8.9-11.15.1.2318-1.8.9'
+}
 
 processResources {
     inputs.property "version", project.version
