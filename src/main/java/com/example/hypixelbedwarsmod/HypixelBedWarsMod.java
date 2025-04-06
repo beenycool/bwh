@@ -75,6 +75,10 @@ public class HypixelBedWarsMod {
     private boolean enableFireballAlerts = true;
     private boolean excludeTeammates = true; // New option to exclude teammates
     private boolean enableItemESP = true; // New option for item highlighting
+    private float itemESPMaxDistance = 80.0F; // new config
+    private float itemESPFadeRange = 60.0F;   // new config
+
+    // Sound constants for different alerts
     private float itemESPMaxDistance = 40.0F; // new configto exclude teammates
     private float itemESPFadeRange = 30.0F;   // new config item highlighting
     private boolean enableObsidianAlerts = true; new config
@@ -86,6 +90,10 @@ true;
     private static final String SOUND_FIREBALL = "mob.ghast.fireball";all";
     private static final String SOUND_POTION = "random.drink";il_use";
     private static final String SOUND_EMERALD = "random.levelup";
+    private static final String SOUND_INVIS = "mob.bat.takeoff";
+    private static final String SOUND_SPECIAL_ITEM = "random.successful_hit";
+
+    // Colors for item ESP
     private static final String SOUND_SPECIAL_ITEM = "random.successful_hit";    private static final String SOUND_POTION = "random.drink";    private static final String SOUND_SPECIAL_ITEM = "random.successful_hit";
 tring SOUND_EMERALD = "random.levelup";
     // Colors for item ESPit";
@@ -332,6 +340,11 @@ e);
                             getDistanceString(player), true, "random.successful_hit");        if (teamColor != null) {                            getDistanceString(player), true, "random.successful_hit");
                 }
             }
+        }
+
+        // Check for obsidian blocks
+        if (enableItemAlerts) checkObsidian(player, state);
+    }
         }layers without a bed
     } less
 
@@ -424,6 +437,12 @@ e);
                 currentPotions.put(id, true);
                 
                 // Alert for newly acquired potions
+                if (!state.activePotions.containsKey(id)) {
+                    String potionName = getPotionName(id);
+                    sendAlert(getColoredPlayerName(player) +
+                            EnumChatFormatting.LIGHT_PURPLE + " drank " + potionName + "! " +
+                            getDistanceString(player), true, SOUND_POTION);
+                }
                 if (!state.activePotions.containsKey(id)) {ts()) {
                     long now = System.currentTimeMillis();
                     // Only alert if last alert was over 10 seconds ago
@@ -451,6 +470,42 @@ e);
         ) {
         state.activePotions = currentPotions;         String potionName = getPotionName(entry.getKey()); state.activePotions = currentPotions;
     }
+    
+    private void checkEmeralds(EntityPlayer player, PlayerState state) {
+        int emeralds = countEmeralds(player.inventory);
+        if (emeralds >= 4 && emeralds > state.lastEmeralds) {
+            sendAlert(getColoredPlayerName(player) +
+                    EnumChatFormatting.GREEN + " has " + emeralds + " emeralds! " +
+                    getDistanceString(player), true, SOUND_EMERALD);
+        }
+        state.lastEmeralds = emeralds;
+    }
+    
+    
+    private void checkObsidian(EntityPlayer player, PlayerState state) {
+        if (player.worldObj == null) return;
+
+        int radius = 5; // Define the radius to check for obsidian blocks
+        int playerX = (int) player.posX;
+        int playerY = (int) player.posY;
+        int playerZ = (int) player.posZ;
+
+        for (int x = playerX - radius; x <= playerX + radius; x++) {
+            for (int y = playerY - radius; y <= playerY + radius; y++) {
+                for (int z = playerZ - radius; z <= playerZ + radius; z++) {
+                    // Fixed method to get blocks in Forge 1.8.9
+                    if (player.worldObj.getBlockState(new net.minecraft.util.BlockPos(x, y, z)).getBlock() == Blocks.obsidian) {
+                        sendAlert(getColoredPlayerName(player) +
+                                EnumChatFormatting.DARK_PURPLE + " has placed OBSIDIAN! " +
+                                getDistanceString(player), true, "random.anvil_land");
+                        return;
+                    }
+                }
+            }
+        }
+    }
+
+    /**
     ore off. " +
     /**e, null);
      * Gets the player's name with their team color applied
@@ -765,6 +820,8 @@ ame().getFormattedText());
         renderItemGroups(itemGroups.values(), event.partialTicks);e position to the averagemGroups.values(), event.partialTicks);
     }em.posX, item.posY, item.posZ);
     
+    private void renderItemESP(List<EntityItem> items, float partialTicks) {
+        // Save GL state
     private void renderItemGroups(Collection<ItemStackGroup> itemGroups, float partialTicks) {float partialTicks) {
         GL11.glPushAttrib(GL11.GL_ALL_ATTRIB_BITS);
         GL11.glPushMatrix();
@@ -773,6 +830,7 @@ ame().getFormattedText());
         GL11.glDisable(GL11.GL_DEPTH_TEST);
         GL11.glEnable(GL11.GL_BLEND);
         GL11.glBlendFunc(GL11.GL_SRC_ALPHA, GL11.GL_ONE_MINUS_SRC_ALPHA);
+        GL11.glLineWidth(2.0F);
         GL11.glLineWidth(2.0F); // Thicker lines for better visibility
         
         // Get player position for relative renderingGL11.glDisable(GL11.GL_TEXTURE_2D);// Get player position for relative rendering
@@ -797,6 +855,9 @@ ame().getFormattedText());
             alpha = Math.max(0.2F, Math.min(0.8F, alpha)); // clamp for semi-transparencyOR : EMERALD_COLOR;mp for semi-transparency
 / Slightly larger box for better visibility
             drawBox(relX, relY, relZ, boxSize, color, alpha);
+            drawItemCount(relX, relY, relZ, stack.stackSize, color);
+        }
+        
             drawItemCount(relX, relY, relZ, group.count, color);loat distance = (float) Math.sqrt(relX * relX + relY * relY + relZ * relZ);rawItemCount(relX, relY, relZ, group.count, color);
                if (distance > itemESPMaxDistance) continue;   
             // Add a beam effect for valuable items (more than 3)dd a beam effect for valuable items (more than 3)
@@ -811,6 +872,9 @@ ame().getFormattedText());
         GL11.glEnable(GL11.GL_LIGHTING);            drawBeam(relX, relY, relZ, color, alpha);    GL11.glEnable(GL11.GL_LIGHTING);
         GL11.glEnable(GL11.GL_DEPTH_TEST);
         GL11.glPopMatrix();
+    }
+    
+    private void drawBox(double x, double y, double z, float size, int color, float alpha) {
         GL11.glPopAttrib();
     }
     GL11.glDisable(GL11.GL_BLEND);
@@ -948,6 +1012,15 @@ ame().getFormattedText());
         // Re-enable textures for rendering text
         GL11.glEnable(GL11.GL_TEXTURE_2D);er by applying inverse rotationURE_2D);
         GL11.glDisable(GL11.GL_LIGHTING);
+        
+        // Draw the text centered
+        String text = String.valueOf(count);
+        int textWidth = Minecraft.getMinecraft().fontRendererObj.getStringWidth(text);
+        Minecraft.getMinecraft().fontRendererObj.drawString(text, -textWidth / 2,
+            -Minecraft.getMinecraft().fontRendererObj.FONT_HEIGHT / 2,
+            color | 0xFF000000);
+        
+        // Restore state for continued rendering
         GL11.glDisable(GL11.GL_DEPTH_TEST);GL11.glRotatef(-player.rotationYaw, 0.0F, 1.0F, 0.0F);GL11.glDisable(GL11.GL_DEPTH_TEST);
         (player.rotationPitch, 1.0F, 0.0F, 0.0F);
         // Draw text shadow for better visibility
@@ -1114,6 +1187,18 @@ break;
             int mouseY = height - org.lwjgl.input.Mouse.getEventY() * height / mc.displayHeight - 1; mouseY, partialTicks);
         }
     }
+
+    private static class PlayerState {
+        private Item lastHeldItem;
+        private boolean lastHeldDiamondSword;
+        private boolean wasHoldingFireball;
+        private int lastEmeralds;
+        private Map<Integer, Boolean> activePotions = new HashMap<>();
+    }
+
+    /**
+     * Checks if the player is currently in a Hypixel Bed Wars game
+     */
    @Override   public boolean lastHeldDiamondSword = false;
     private static class PlayerState {        public void handleMouseInput() throws IOException {        public boolean wasHoldingFireball = false;
         public Item lastHeldItem = null;
@@ -1133,6 +1218,20 @@ break;
     } &&
 Data().serverIP.toLowerCase().contains("hypixel.net");
     private boolean isHypixelBedWars() {
+        return inBedWarsGame;
+    }
+
+    /**
+     * Gets the readable name of a potion effect by its ID
+     */
+    private String getPotionName(int potionId) {
+        switch (potionId) {
+            case SPEED_POTION_ID:
+                return "Speed Potion";
+            case JUMP_BOOST_POTION_ID:
+                return "Jump Potion";
+            default:
+                return "Potion";
         return Minecraft.getMinecraft().getCurrentServerData() != null &&rn "Speed";
                Minecraft.getMinecraft().getCurrentServerData().serverIP.toLowerCase().contains("hypixel.net");            case JUMP_BOOST_POTION_ID: return "Jump Boost";    private static class Team {
     }
