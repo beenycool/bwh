@@ -318,7 +318,6 @@ public class ItemDetector {
         
         // Clean up cache periodically
         if (currentTime - lastCacheCleanup > 60000) { // Every minute
-            lastHeldItemCache.clear();
             lastCacheCleanup = currentTime;
         }
     }
