@@ -1,7 +1,9 @@
 buildscript {
     repositories {
         maven { url = "https://files.minecraftforge.net/maven" }
+        maven { url = "https://maven.minecraftforge.net/" }
         mavenCentral()
+        jcenter()
     }
     dependencies {
         classpath "net.minecraftforge.gradle:ForgeGradle:2.1-SNAPSHOT"
@@ -10,7 +12,7 @@ buildscript {
 
 apply plugin: "net.minecraftforge.gradle.forge"
 
-version = "1.0"
+version = "2.0"
 group = "com.example.hypixelbedwarsmod"
 archivesBaseName = "hypixelbedwarsmod"
 
@@ -26,7 +28,30 @@ compileJava {
     sourceCompatibility = targetCompatibility = '1.8'
 }
 
-dependencies {} // Add dependencies here if needed
+configurations {
+    embed
+    implementation.extendsFrom(embed)
+}
+
+dependencies {
+    embed 'com.google.code.gson:gson:2.8.9'
+}
+
+jar {
+    from configurations.embed.collect { it.isDirectory() ? it : zipTree(it) }
+    
+    manifest {
+        attributes([
+            "Specification-Title": "Hypixel Bed Wars Assistant",
+            "Specification-Vendor": "Beeny",
+            "Specification-Version": version,
+            "Implementation-Title": project.name,
+            "Implementation-Version": version,
+            "Implementation-Vendor": "Beeny",
+            "Implementation-Timestamp": new Date().format("yyyy-MM-dd'T'HH:mm:ssZ")
+        ])
+    }
+}
 
 processResources {
     inputs.property "version", project.version
