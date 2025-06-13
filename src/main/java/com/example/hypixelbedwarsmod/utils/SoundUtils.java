@@ -98,15 +98,17 @@ public class SoundUtils {
     /**
      * Set custom cooldown for a sound
      */
-    public static void setSoundCooldown(String soundName, long cooldownMs) {
-        soundCooldowns.put(soundName, System.currentTimeMillis() + cooldownMs);
+    public static void setSoundCooldown(String soundName, float volume, float pitch, long cooldownMs) {
+        SoundKey key = new SoundKey(soundName, volume, pitch);
+        soundCooldowns.put(key, System.currentTimeMillis() + cooldownMs);
     }
 
     /**
      * Check if a sound is on cooldown
      */
-    public static boolean isSoundOnCooldown(String soundName) {
-        Long lastPlayed = soundCooldowns.get(soundName);
+    public static boolean isSoundOnCooldown(String soundName, float volume, float pitch) {
+        SoundKey key = new SoundKey(soundName, volume, pitch);
+        Long lastPlayed = soundCooldowns.get(key);
         return lastPlayed != null && 
                System.currentTimeMillis() - lastPlayed < DEFAULT_SOUND_COOLDOWN;
     }
