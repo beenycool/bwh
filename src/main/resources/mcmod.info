@@ -2,10 +2,11 @@
   {
     "modid": "hypixelbedwarsmod",
     "name": "Hypixel Bed Wars Assistant",
-    "description": "A useful Bedwars Mod!",
-    "version": "1.0",
+    "description": "Advanced Bed Wars assistance with player tracking, fireball prediction, item ESP, and comprehensive alerting system. Optimized for performance and reliability.",
+    "version": "2.0",
     "mcversion": "1.8.9",
     "authorList": ["Beeny"],
-    "url": ""
+    "url": "",
+    "credits": "Refactored for improved performance and maintainability"
   }
 ]
