@@ -237,10 +237,12 @@ public class ConfigScreen extends GuiScreen {
         // Category highlight
         for (int i = 0; i < CATEGORIES.length; i++) {
             if (i == currentCategory) {
-                GuiButton categoryButton = buttonList.get(i + 1000);
-                drawRect(categoryButton.xPosition - 2, categoryButton.yPosition - 2,
-                        categoryButton.xPosition + categoryButton.width + 2,
-                        categoryButton.yPosition + categoryButton.height + 2, 0x80FFFFFF);
+                GuiButton categoryButton = getButtonById(i + 1000);
+                if (categoryButton != null) {
+                    drawRect(categoryButton.xPosition - 2, categoryButton.yPosition - 2,
+                            categoryButton.xPosition + categoryButton.width + 2,
+                            categoryButton.yPosition + categoryButton.height + 2, 0x80FFFFFF);
+                }
             }
         }
         
