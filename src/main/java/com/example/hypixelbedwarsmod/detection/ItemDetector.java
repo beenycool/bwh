@@ -42,7 +42,7 @@ public class ItemDetector {
     private final Map<String, Long> alertCooldowns = new ConcurrentHashMap<>();
     
     // Cache for frequently accessed data
-    private final Map<String, ItemStack> lastHeldItemCache = new ConcurrentHashMap<>();
+    // Removed unused lastHeldItemCache variable to improve code clarity.
     private long lastCacheCleanup = System.currentTimeMillis();
     
     public ItemDetector(ConfigManager configManager) {
