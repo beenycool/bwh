@@ -39,6 +39,103 @@ public class PlayerTracker {
         initializeTeams();
     }
 
+    /**
+     * NEW: Process chat message for team detection
+     */
+    public void processChatMessage(IChatComponent chatComponent) {
+        if (chatComponent == null) return;
+        
+        String message = chatComponent.getUnformattedText();
+        String formattedMessage = chatComponent.getFormattedText();
+        
+        // Check for team chat patterns
+        Matcher teamChatMatcher = TEAM_CHAT_PATTERN.matcher(message);
+        if (teamChatMatcher.matches()) {
+            String playerName = cleanPlayerName(teamChatMatcher.group(1));
+            // Players in team chat are teammates
+            markAsTeammate(playerName);
+            return;
+        }
+        
+        // Check for party chat (likely teammates)
+        Matcher partyChatMatcher = PARTY_CHAT_PATTERN.matcher(message);
+        if (partyChatMatcher.matches()) {
+            String playerName = cleanPlayerName(partyChatMatcher.group(1));
+            markAsTeammate(playerName);
+            return;
+        }
+        
+        // Extract team colors from formatted text
+        extractTeamFromFormattedText(formattedMessage);
+    }
+    
+    /**
+     * Extract team information from formatted chat text
+     */
+    private void extractTeamFromFormattedText(String formattedText) {
+        // Look for color codes followed by player names
+        Pattern colorPlayerPattern = Pattern.compile("§([0-9a-fk-or])([a-zA-Z0-9_]+)");
+        Matcher matcher = colorPlayerPattern.matcher(formattedText);
+        
+        while (matcher.find()) {
+            String colorCode = matcher.group(1);
+            String playerName = matcher.group(2);
+            
+            EnumChatFormatting color = getColorFromCode(colorCode);
+            if (color != null && COLOR_TO_TEAM.containsKey(color)) {
+                String teamName = COLOR_TO_TEAM.get(color);
+                setPlayerTeam(playerName, teamName, color);
+            }
+        }
+    }
+    
+    /**
+     * Clean player name by removing ranks and formatting
+     */
+    private String cleanPlayerName(String rawName) {
+        if (rawName == null) return "";
+        
+        // Remove rank prefixes like [MVP+], [VIP], etc.
+        Matcher rankMatcher = RANK_PATTERN.matcher(rawName.trim());
+        if (rankMatcher.matches()) {
+            return rankMatcher.group(1).trim();
+        }
+        
+        return rawName.trim();
+    }
+    
+    /**
+     * Mark a player as teammate
+     */
+    private void markAsTeammate(String playerName) {
+        String cleanName = cleanPlayerName(playerName);
+        EntityPlayer localPlayer = Minecraft.getMinecraft().thePlayer;
+        if (localPlayer != null) {
+            // Assume same team as local player
+            String localTeam = getPlayerTeam(localPlayer.getName());
+            if (localTeam != null) {
+                setPlayerTeam(cleanName, localTeam, getCurrentPlayerTeamColor());
+            }
+        }
+    }
+    
+    /**
+     * Get color from formatting code
+     */
+    private EnumChatFormatting getColorFromCode(String code) {
+        switch (code.toLowerCase()) {
+            case "4": case "c": return EnumChatFormatting.RED;
+            case "1": case "9": return EnumChatFormatting.BLUE;
+            case "2": case "a": return EnumChatFormatting.GREEN;
+            case "e": case "6": return EnumChatFormatting.YELLOW;
+            case "b": case "3": return EnumChatFormatting.AQUA;
+            case "f": case "7": return EnumChatFormatting.WHITE;
+            case "8": return EnumChatFormatting.GRAY;
+            case "5": case "d": return EnumChatFormatting.DARK_PURPLE;
+            default: return null;
+        }
+    }
+
     private static Map<String, EnumChatFormatting> initializeColorMap() {
         Map<String, EnumChatFormatting> map = new HashMap<>();
         map.put("0", EnumChatFormatting.BLACK);
@@ -249,4 +346,77 @@ public class PlayerTracker {
     private EntityPlayer getCurrentPlayer() {
         return net.minecraft.client.Minecraft.getMinecraft().thePlayer;
     }
+    
+    /**
+     * NEW: Enhanced team detection methods for smart team assignment
+     */
+    public void setPlayerTeamInfo(String playerName, String teamName, EnumChatFormatting color) {
+        String key = playerName.toLowerCase();
+        playerTeams.put(key, teamName);
+        teamColors.put(key, color.toString());
+        playerDisplayNames.put(key, playerName);
+    }
+    
+    public String getPlayerTeamName(String playerName) {
+        return playerTeams.get(playerName.toLowerCase());
+    }
+    
+    public EnumChatFormatting getPlayerTeamColorFormatting(String playerName) {
+        String colorStr = teamColors.get(playerName.toLowerCase());
+        if (colorStr != null) {
+            try {
+                return EnumChatFormatting.valueOf(colorStr);
+            } catch (Exception e) {
+                return EnumChatFormatting.WHITE;
+            }
+        }
+        return EnumChatFormatting.WHITE;
+    }
+    
+    /**
+     * Process chat messages for team detection
+     */
+    public void processChatMessage(String message) {
+        if (message == null || message.isEmpty()) return;
+        
+        // Look for team chat patterns
+        if (message.startsWith("[TEAM]")) {
+            // Extract player name from team chat
+            String[] parts = message.split(": ", 2);
+            if (parts.length > 0) {
+                String playerPart = parts[0].replace("[TEAM]", "").trim();
+                String cleanName = cleanPlayerName(playerPart);
+                markAsTeammate(cleanName);
+            }
+        }
+        
+        // Look for party chat (likely teammates)
+        if (message.startsWith("Party >")) {
+            String[] parts = message.split(": ", 2);
+            if (parts.length > 0) {
+                String playerPart = parts[0].replace("Party >", "").trim();
+                String cleanName = cleanPlayerName(playerPart);
+                markAsTeammate(cleanName);
+            }
+        }
+    }
+    
+    private String cleanPlayerName(String rawName) {
+        if (rawName == null) return "";
+        
+        // Remove rank prefixes like [MVP+], [VIP], etc.
+        String cleaned = rawName.replaceAll("\\[.+?\\]\\s*", "").trim();
+        return cleaned;
+    }
+    
+    private void markAsTeammate(String playerName) {
+        EntityPlayer localPlayer = getCurrentPlayer();
+        if (localPlayer != null) {
+            String localTeam = getPlayerTeamName(localPlayer.getName());
+            if (localTeam != null) {
+                setPlayerTeamInfo(playerName, localTeam, getPlayerTeamColorFormatting(localPlayer.getName()));
+            }
+        }
+    }
+}
 }

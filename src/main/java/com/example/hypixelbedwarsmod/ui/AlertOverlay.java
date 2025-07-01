@@ -15,11 +15,17 @@ import java.util.List;
  */
 public class AlertOverlay extends Gui {
     private final List<AlertMessage> activeAlerts = new ArrayList<>();
+    // NEW: Alert History for persistent tracking
+    private final List<AlertMessage> alertHistory = new ArrayList<>();
     private final Minecraft mc = Minecraft.getMinecraft();
     
     private static final int MAX_ALERTS = 5;
+    private static final int MAX_HISTORY = 50; // Keep last 50 alerts in history
     private static final int ALERT_DURATION = 5000; // 5 seconds
     private static final int FADE_DURATION = 1000; // 1 second fade
+    
+    // NEW: History panel display state
+    private boolean showHistoryPanel = false;
     
     public void addAlert(String message, AlertType type) {
         AlertMessage alert = new AlertMessage(message, type, System.currentTimeMillis());
@@ -30,14 +36,22 @@ public class AlertOverlay extends Gui {
         }
         
         activeAlerts.add(alert);
+        
+        // NEW: Add to history
+        alertHistory.add(alert);
+        
+        // Maintain history size limit
+        if (alertHistory.size() > MAX_HISTORY) {
+            alertHistory.remove(0);
+        }
     }
 
     public void render() {
-        if (activeAlerts.isEmpty() || mc.currentScreen != null) return;
+        if (mc.currentScreen != null) return;
         
         long currentTime = System.currentTimeMillis();
         
-        // Remove expired alerts
+        // Remove expired active alerts
         Iterator<AlertMessage> iterator = activeAlerts.iterator();
         while (iterator.hasNext()) {
             AlertMessage alert = iterator.next();
@@ -46,8 +60,15 @@ public class AlertOverlay extends Gui {
             }
         }
         
-        // Render alerts
-        renderAlerts(currentTime);
+        // Render active alerts
+        if (!activeAlerts.isEmpty()) {
+            renderAlerts(currentTime);
+        }
+        
+        // NEW: Render history panel if enabled
+        if (showHistoryPanel) {
+            renderHistoryPanel(currentTime);
+        }
     }
 
     private void renderAlerts(long currentTime) {
@@ -113,6 +134,168 @@ public class AlertOverlay extends Gui {
 
     public int getActiveAlertCount() {
         return activeAlerts.size();
+    }
+    
+    // NEW: History panel methods
+    public void toggleHistoryPanel() {
+        showHistoryPanel = !showHistoryPanel;
+    }
+    
+    public void setHistoryPanelVisible(boolean visible) {
+        showHistoryPanel = visible;
+    }
+    
+    public boolean isHistoryPanelVisible() {
+        return showHistoryPanel;
+    }
+    
+    public List<AlertMessage> getAlertHistory() {
+        return new ArrayList<>(alertHistory);
+    }
+    
+    public void clearHistory() {
+        alertHistory.clear();
+    }
+    
+    /**
+     * NEW: Render the alert history panel
+     */
+    private void renderHistoryPanel(long currentTime) {
+        if (alertHistory.isEmpty()) return;
+        
+        FontRenderer fontRenderer = mc.fontRendererObj;
+        int screenWidth = mc.displayWidth / 2;
+        int screenHeight = mc.displayHeight / 2;
+        
+        // Panel dimensions
+        int panelWidth = 300;
+        int panelHeight = 200;
+        int panelX = 10;
+        int panelY = screenHeight - panelHeight - 10;
+        
+        GlStateManager.pushMatrix();
+        GlStateManager.enableBlend();
+        GlStateManager.blendFunc(770, 771);
+        
+        // Background
+        drawRect(panelX, panelY, panelX + panelWidth, panelY + panelHeight, 0x80000000);
+        
+        // Border
+        drawRect(panelX - 1, panelY - 1, panelX + panelWidth + 1, panelY + panelHeight + 1, 0xFF555555);
+        
+        // Title
+        String title = "Alert History (" + alertHistory.size() + ")";
+        fontRenderer.drawString(title, panelX + 5, panelY + 5, 0xFFFFFF);
+        
+        // Alerts (show last 10)
+        int startIndex = Math.max(0, alertHistory.size() - 10);
+        int yOffset = panelY + 20;
+        
+        for (int i = startIndex; i < alertHistory.size() && yOffset < panelY + panelHeight - 15; i++) {
+            AlertMessage alert = alertHistory.get(i);
+            
+            // Format timestamp
+            long minutesAgo = (currentTime - alert.timestamp) / 60000;
+            String timeText = minutesAgo < 1 ? "now" : minutesAgo + "m ago";
+            
+            // Truncate message if too long
+            String message = alert.message;
+            if (fontRenderer.getStringWidth(message) > panelWidth - 60) {
+                message = fontRenderer.trimStringToWidth(message, panelWidth - 60) + "...";
+            }
+            
+            // Draw time
+            fontRenderer.drawString(timeText, panelX + 5, yOffset, 0xAAAAAA);
+            
+            // Draw message with type color
+            fontRenderer.drawString(message, panelX + 50, yOffset, alert.type.getColor());
+            
+            yOffset += 12;
+        }
+        
+        GlStateManager.disableBlend();
+        GlStateManager.popMatrix();
+    }
+    
+    // NEW: History panel methods
+    public void toggleHistoryPanel() {
+        showHistoryPanel = !showHistoryPanel;
+    }
+    
+    public void setHistoryPanelVisible(boolean visible) {
+        showHistoryPanel = visible;
+    }
+    
+    public boolean isHistoryPanelVisible() {
+        return showHistoryPanel;
+    }
+    
+    public List<AlertMessage> getAlertHistory() {
+        return new ArrayList<>(alertHistory);
+    }
+    
+    public void clearHistory() {
+        alertHistory.clear();
+    }
+    
+    /**
+     * NEW: Render the alert history panel
+     */
+    private void renderHistoryPanel(long currentTime) {
+        if (alertHistory.isEmpty()) return;
+        
+        FontRenderer fontRenderer = mc.fontRendererObj;
+        int screenWidth = mc.displayWidth / 2;
+        int screenHeight = mc.displayHeight / 2;
+        
+        // Panel dimensions
+        int panelWidth = 300;
+        int panelHeight = 200;
+        int panelX = 10;
+        int panelY = screenHeight - panelHeight - 10;
+        
+        GlStateManager.pushMatrix();
+        GlStateManager.enableBlend();
+        GlStateManager.blendFunc(770, 771);
+        
+        // Background
+        drawRect(panelX, panelY, panelX + panelWidth, panelY + panelHeight, 0x80000000);
+        
+        // Border
+        drawRect(panelX - 1, panelY - 1, panelX + panelWidth + 1, panelY + panelHeight + 1, 0xFF555555);
+        
+        // Title
+        String title = "Alert History (" + alertHistory.size() + ")";
+        fontRenderer.drawString(title, panelX + 5, panelY + 5, 0xFFFFFF);
+        
+        // Alerts (show last 10)
+        int startIndex = Math.max(0, alertHistory.size() - 10);
+        int yOffset = panelY + 20;
+        
+        for (int i = startIndex; i < alertHistory.size() && yOffset < panelY + panelHeight - 15; i++) {
+            AlertMessage alert = alertHistory.get(i);
+            
+            // Format timestamp
+            long minutesAgo = (currentTime - alert.timestamp) / 60000;
+            String timeText = minutesAgo < 1 ? "now" : minutesAgo + "m ago";
+            
+            // Truncate message if too long
+            String message = alert.message;
+            if (fontRenderer.getStringWidth(message) > panelWidth - 60) {
+                message = fontRenderer.trimStringToWidth(message, panelWidth - 60) + "...";
+            }
+            
+            // Draw time
+            fontRenderer.drawString(timeText, panelX + 5, yOffset, 0xAAAAAA);
+            
+            // Draw message with type color
+            fontRenderer.drawString(message, panelX + 50, yOffset, alert.type.getColor());
+            
+            yOffset += 12;
+        }
+        
+        GlStateManager.disableBlend();
+        GlStateManager.popMatrix();
     }
 
     /**
