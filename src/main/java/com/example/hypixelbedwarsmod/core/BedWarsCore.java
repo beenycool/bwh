@@ -64,7 +64,9 @@ public class BedWarsCore {
             
         } catch (Exception e) {
             ChatUtils.sendError("Failed to initialize mod: " + e.getMessage());
-            e.printStackTrace();
+            ChatUtils.sendError("Check console for details. Some features may not work correctly.");
+            System.err.println("[BWA] Initialization error: " + e.getMessage());
+            e.printStackTrace(); // Keep for debugging purposes
         }
     }
 

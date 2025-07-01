@@ -4,8 +4,8 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.audio.PositionedSoundRecord;
 import net.minecraft.util.ResourceLocation;
 
-import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Utility class for sound operations with cooldown management
@@ -22,7 +22,7 @@ public class SoundUtils {
     public static final String SOUND_SPECIAL_ITEM = "random.successful_hit";
     public static final String SOUND_EXPLODE = "random.explode";
     
-    private static final Map<String, Long> soundCooldowns = new HashMap<>();
+    private static final Map<String, Long> soundCooldowns = new ConcurrentHashMap<>();
     private static final long DEFAULT_SOUND_COOLDOWN = 1000; // 1 second between same sounds
 
     /**
