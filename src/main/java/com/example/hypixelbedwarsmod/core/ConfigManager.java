@@ -160,6 +160,18 @@ public class ConfigManager {
     public void setEspToggleKey(int key) { config.espToggleKey = key; saveConfig(); }
     public void setConfigKey(int key) { config.configKey = key; saveConfig(); }
     public void setHistoryToggleKey(int key) { config.historyToggleKey = key; saveConfig(); }
+    public int getDiagnosticsKey() { return config.diagnosticsKey; }
+    public void setDiagnosticsKey(int key) { config.diagnosticsKey = key; saveConfig(); }
+    
+    // NEW: Per-alert customization getters
+    public AlertCustomization getArmorAlertCustomization() { return config.armorAlerts; }
+    public AlertCustomization getItemAlertCustomization() { return config.itemAlerts; }
+    public AlertCustomization getEmeraldAlertCustomization() { return config.emeraldAlerts; }
+    public AlertCustomization getSwordAlertCustomization() { return config.swordAlerts; }
+    public AlertCustomization getPotionAlertCustomization() { return config.potionAlerts; }
+    public AlertCustomization getFireballAlertCustomization() { return config.fireballAlerts; }
+    public AlertCustomization getObsidianAlertCustomization() { return config.obsidianAlerts; }
+    public AlertCustomization getIntentAlertCustomization() { return config.intentAlerts; }
     
     public void setItemESPMaxDistance(float distance) { config.itemESPMaxDistance = distance; }
     public void setItemESPFadeRange(float range) { config.itemESPFadeRange = range; }
@@ -192,6 +204,17 @@ public class ConfigManager {
         public int espToggleKey = 75;  // K key  
         public int configKey = 76;     // L key
         public int historyToggleKey = 72; // H key
+        public int diagnosticsKey = 73; // I key
+        
+        // NEW: Per-alert customization settings
+        public AlertCustomization armorAlerts = new AlertCustomization();
+        public AlertCustomization itemAlerts = new AlertCustomization();
+        public AlertCustomization emeraldAlerts = new AlertCustomization();
+        public AlertCustomization swordAlerts = new AlertCustomization();
+        public AlertCustomization potionAlerts = new AlertCustomization();
+        public AlertCustomization fireballAlerts = new AlertCustomization();
+        public AlertCustomization obsidianAlerts = new AlertCustomization();
+        public AlertCustomization intentAlerts = new AlertCustomization();
         
         // Gameplay options
         public boolean excludeTeammates = true;
@@ -205,5 +228,33 @@ public class ConfigManager {
         public long generalCooldown = 5000;
         public long obsidianCooldown = 10000;
         public long fireballAlertCooldown = 750;
+    }
+    
+    /**
+     * NEW: Per-alert customization settings
+     */
+    public static class AlertCustomization {
+        public boolean playSound = true;
+        public boolean showInChat = true;
+        public boolean showOnOverlay = true;
+        public float soundVolume = 1.0f;
+        public String soundType = "default"; // default, warning, critical
+        public int textColor = 0xFFFFFF; // White by default
+        public int priority = 1; // 1=low, 2=medium, 3=high
+        
+        public AlertCustomization() {
+            // Default settings
+        }
+        
+        public AlertCustomization(boolean playSound, boolean showInChat, boolean showOnOverlay, 
+                                float soundVolume, String soundType, int textColor, int priority) {
+            this.playSound = playSound;
+            this.showInChat = showInChat;
+            this.showOnOverlay = showOnOverlay;
+            this.soundVolume = soundVolume;
+            this.soundType = soundType;
+            this.textColor = textColor;
+            this.priority = priority;
+        }
     }
 }
