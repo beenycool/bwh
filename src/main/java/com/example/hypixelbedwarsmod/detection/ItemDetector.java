@@ -54,6 +54,12 @@ public class ItemDetector {
         if (player == localPlayer) return;
         
         String playerName = player.getName();
+        
+        // NEW: Check if player is muted
+        if (configManager.isPlayerMuted(playerName)) {
+            return; // Skip processing for muted players
+        }
+        
         PlayerState state = getOrCreatePlayerState(playerName);
         
         // Process different types of detection
@@ -79,6 +85,11 @@ public class ItemDetector {
         
         if (configManager.isObsidianAlertsEnabled()) {
             checkObsidian(player, state);
+        }
+        
+        // NEW: Player Intent Detection
+        if (configManager.isPlayerIntentDetectionEnabled()) {
+            checkPlayerIntent(player, state);
         }
     }
 
@@ -146,6 +157,43 @@ public class ItemDetector {
                 getColoredPlayerName(player) + EnumChatFormatting.AQUA + " has a DIAMOND SWORD " +
                 ChatUtils.formatDistance(player.getDistanceToEntity(getCurrentPlayer())),
                 SoundUtils.SOUND_DIAMOND_SWORD);
+                
+        // NEW: Bridge Eggs & Utility Item Detection
+        } else if (item == Items.egg) {
+            sendAlertWithCooldown(playerName + "_bridge_egg",
+                getColoredPlayerName(player) + EnumChatFormatting.YELLOW + " has BRIDGE EGG " +
+                ChatUtils.formatDistance(player.getDistanceToEntity(getCurrentPlayer())),
+                SoundUtils.SOUND_SPECIAL_ITEM);
+                
+        } else if (item == Item.getItemFromBlock(Blocks.tnt)) {
+            sendAlertWithCooldown(playerName + "_tnt",
+                getColoredPlayerName(player) + EnumChatFormatting.RED + " has TNT " +
+                ChatUtils.formatDistance(player.getDistanceToEntity(getCurrentPlayer())),
+                SoundUtils.SOUND_EXPLODE);
+                
+        } else if (item == Items.milk_bucket) {
+            sendAlertWithCooldown(playerName + "_magic_milk",
+                getColoredPlayerName(player) + EnumChatFormatting.WHITE + " has MAGIC MILK " +
+                ChatUtils.formatDistance(player.getDistanceToEntity(getCurrentPlayer())),
+                SoundUtils.SOUND_SPECIAL_ITEM);
+                
+        } else if (item == Items.golden_apple) {
+            sendAlertWithCooldown(playerName + "_golden_apple",
+                getColoredPlayerName(player) + EnumChatFormatting.GOLD + " has GOLDEN APPLE " +
+                ChatUtils.formatDistance(player.getDistanceToEntity(getCurrentPlayer())),
+                SoundUtils.SOUND_SPECIAL_ITEM);
+                
+        } else if (item == Items.water_bucket) {
+            sendAlertWithCooldown(playerName + "_water_bucket",
+                getColoredPlayerName(player) + EnumChatFormatting.BLUE + " has WATER BUCKET " +
+                ChatUtils.formatDistance(player.getDistanceToEntity(getCurrentPlayer())),
+                SoundUtils.SOUND_SPECIAL_ITEM);
+                
+        } else if (item == Items.fire_charge) {
+            sendAlertWithCooldown(playerName + "_fire_charge",
+                getColoredPlayerName(player) + EnumChatFormatting.GOLD + " has FIRE CHARGE " +
+                ChatUtils.formatDistance(player.getDistanceToEntity(getCurrentPlayer())),
+                SoundUtils.SOUND_FIREBALL);
         }
     }
 
@@ -214,6 +262,60 @@ public class ItemDetector {
         }
     }
 
+    /**
+     * NEW: Player Intent Detection - Predict when a player is likely to rush
+     */
+    private void checkPlayerIntent(EntityPlayer player, PlayerState state) {
+        if (player == getCurrentPlayer()) return;
+        
+        EntityPlayer localPlayer = getCurrentPlayer();
+        double distance = player.getDistanceToEntity(localPlayer);
+        
+        // Only check players within reasonable range
+        if (distance > 50.0) return;
+        
+        boolean hasTNT = hasItem(player.inventory, Item.getItemFromBlock(Blocks.tnt));
+        boolean hasPearls = hasItem(player.inventory, Items.ender_pearl);
+        boolean hasBridgeEggs = hasItem(player.inventory, Items.egg);
+        boolean hasFireCharges = hasItem(player.inventory, Items.fire_charge);
+        
+        // Calculate rush threat level
+        int rushScore = 0;
+        if (hasTNT) rushScore += 3;
+        if (hasPearls) rushScore += 2;
+        if (hasBridgeEggs) rushScore += 1;
+        if (hasFireCharges) rushScore += 1;
+        
+        // Check if player is approaching (moving towards us)
+        double dx = localPlayer.posX - player.posX;
+        double dz = localPlayer.posZ - player.posZ;
+        double motionTowardsPlayer = (player.motionX * dx + player.motionZ * dz);
+        boolean isApproaching = motionTowardsPlayer > 0.1 && distance < 30.0;
+        
+        // Send intent alerts based on threat level
+        String playerName = player.getName();
+        if (rushScore >= 3 && isApproaching) {
+            sendAlertWithCooldown(playerName + "_critical_rush_intent",
+                getColoredPlayerName(player) + EnumChatFormatting.DARK_RED + " INCOMING RUSH! " +
+                EnumChatFormatting.RED + "(TNT/Pearls) " +
+                ChatUtils.formatDistance(distance),
+                SoundUtils.SOUND_EXPLODE, 8000); // 8 second cooldown for critical alerts
+                
+        } else if (rushScore >= 2 && distance < 20.0) {
+            sendAlertWithCooldown(playerName + "_rush_intent",
+                getColoredPlayerName(player) + EnumChatFormatting.RED + " POSSIBLE RUSH " +
+                EnumChatFormatting.YELLOW + "(Rush items nearby) " +
+                ChatUtils.formatDistance(distance),
+                SoundUtils.SOUND_SPECIAL_ITEM, 10000); // 10 second cooldown
+                
+        } else if (rushScore >= 1 && isApproaching && distance < 15.0) {
+            sendAlertWithCooldown(playerName + "_approach_warning",
+                getColoredPlayerName(player) + EnumChatFormatting.YELLOW + " approaching with items " +
+                ChatUtils.formatDistance(distance),
+                SoundUtils.SOUND_SPECIAL_ITEM, 15000); // 15 second cooldown
+        }
+    }
+
     public void renderItemESP(World world, EntityPlayer localPlayer, float partialTicks) {
         if (!configManager.isItemESPEnabled()) return;
         
@@ -242,8 +344,10 @@ public class ItemDetector {
     }
 
     private int getItemESPColor(Item item) {
+        // NEW: Enhanced ESP with custom colors and rarity filtering
         if (item == Items.diamond || item == Items.diamond_sword || 
-            item == Items.diamond_pickaxe || item == Items.diamond_axe) {
+            item == Items.diamond_pickaxe || item == Items.diamond_axe ||
+            item == Items.diamond_boots || item == Items.diamond_leggings) {
             return DIAMOND_COLOR;
         } else if (item == Items.emerald) {
             return EMERALD_COLOR;
@@ -251,8 +355,22 @@ public class ItemDetector {
             return GOLD_COLOR;
         } else if (item == Items.iron_ingot || item == Items.iron_sword) {
             return IRON_COLOR;
+        } else if (item == Items.ender_pearl) {
+            return 0x9900FF; // Purple for pearls
+        } else if (item == Item.getItemFromBlock(Blocks.tnt)) {
+            return 0xFF0000; // Red for TNT
+        } else if (item == Items.egg) { // Bridge eggs
+            return 0xFFFF00; // Yellow for bridge eggs
+        } else if (item == Items.milk_bucket) {
+            return 0xFFFFFF; // White for magic milk
+        } else if (item == Items.water_bucket) {
+            return 0x0077FF; // Blue for water
+        } else if (item == Items.fire_charge) {
+            return 0xFF6600; // Orange for fire charges
+        } else if (item == Item.getItemFromBlock(Blocks.obsidian)) {
+            return 0x330033; // Dark purple for obsidian
         }
-        return 0; // No highlight
+        return 0; // No highlight for other items
     }
 
     private int countEmeralds(InventoryPlayer inventory) {
